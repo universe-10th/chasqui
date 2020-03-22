@@ -16,6 +16,26 @@ func (AlreadyListeningError) Error() string {
 }
 
 
+// Callback to report when an attendant successfully ran
+// its lifecycle.
+type OnStart func(*Attendant, *net.TCPAddr)
+
+
+// Callback to report when an attendant could successfully
+// accept an incoming connection.
+type OnAcceptSuccess func(*Attendant, *net.TCPConn)
+
+
+// Callback to report when an attendant failed to accept
+// an incoming connection.
+type OnAcceptError func(*Attendant, error)
+
+
+// Callback to report when an attendant successfully ended
+// its lifecycle.
+type OnStop func(*Attendant)
+
+
 // A server lifecycle for TCP sockets. It does not provide
 // any mean or workflow for the individual connections. It
 // provides 4 callbacks to handle when it started, when it
@@ -26,20 +46,20 @@ func (AlreadyListeningError) Error() string {
 // error or a "closer" function: a function with no args /
 // return value that will close the server. This implies
 // that the lifecycle will run on its own goroutine.
-type ServerLifeCycle struct {
+type Attendant struct {
 	mutex           sync.Mutex
 	listener        *net.TCPListener
-	onStart         func(*ServerLifeCycle, *net.TCPAddr)
-	onAcceptSuccess func(*ServerLifeCycle, *net.TCPConn)
-	onAcceptError   func(*ServerLifeCycle, error)
-	onStop          func(*ServerLifeCycle)
+	onStart         OnStart
+	onAcceptSuccess OnAcceptSuccess
+	onAcceptError   OnAcceptError
+	onStop          OnStop
 }
 
 
 // Runs the server lifecycle in a separate goroutine. The
 // only job of this server is to run the accept loop and
 // report any error being triggered.
-func (server *ServerLifeCycle) Run(host string) (func(), error) {
+func (server *Attendant) Run(host string) (func(), error) {
 	// Start to listen, and keep the listener.
 	var finalHost *net.TCPAddr
 	server.mutex.Lock()
@@ -50,7 +70,6 @@ func (server *ServerLifeCycle) Run(host string) (func(), error) {
 	} else {
 		finalHost = host
 		server.listener = listener
-		server.listener.Close()
 	}
 	server.mutex.Unlock()
 
@@ -63,20 +82,42 @@ func (server *ServerLifeCycle) Run(host string) (func(), error) {
 	// got accepted the first time. The only way to
 	// stop them, is gracefully.
 	go func(){
-		server.onStart(server, finalHost)
+		if server.onStart != nil {
+			server.onStart(server, finalHost)
+		}
 		for {
 			select {
 			case <-quit:
 				break
 			default:
 				if conn, err := server.listener.Accept(); err != nil {
-					server.onAcceptError(server, err)
+					if server.onAcceptError != nil {
+						server.onAcceptError(server, err)
+					}
 				} else {
-					server.onAcceptSuccess(server, conn.(*net.TCPConn))
+					if server.onAcceptSuccess != nil {
+						server.onAcceptSuccess(server, conn.(*net.TCPConn))
+					}
 				}
 			}
 		}
-		server.onStop(server)
+		if server.onStop != nil {
+			server.onStop(server)
+		}
+		server.listener.Close()
+		server.listener = nil
 	}()
-	return func() { quit<-1 }, nil
+	return func() { quit<- 1 }, nil
+}
+
+
+// Creates a new attendant, ready to be used.
+func NewAttendant(onStart OnStart, onAcceptSuccess OnAcceptSuccess,
+				  onAcceptError OnAcceptError, onStop OnStop) *Attendant {
+	return &Attendant{
+		onStart: onStart,
+		onAcceptSuccess: onAcceptSuccess,
+		onAcceptError: onAcceptError,
+		onStop: onStop,
+	}
 }
