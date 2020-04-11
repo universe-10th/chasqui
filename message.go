@@ -20,12 +20,6 @@ type Message interface {
 }
 
 
-// The first channel to use is the Queue. Each socket
-// has two queues: one for the received messages and
-// another one for the sent messages.
-type Queue chan *Message
-
-
 // Message Marshalers are wrappers around a read-write
 // object, and will do their magic to receive / send
 // Message objects (implementations will vary, but the
@@ -33,7 +27,6 @@ type Queue chan *Message
 // constructor taking a read-writer and creating the
 // wrapper for it.
 type MessageMarshaler interface {
-	Buffer()               io.ReadWriter
 	Receive()              (*Message, error)
 	Send(message *Message) error
 	// Constructor - Creates a new marshaler by its buffer.
