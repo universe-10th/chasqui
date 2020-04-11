@@ -118,6 +118,8 @@ type OnAttendantStop func(*Attendant, AttendantStopType, error)
 // and the attendant will be useless and securely disposable.
 //
 // An internal state of the attendant will also be kept.
+// Also, each attendant will hold its own data (e.g. current
+// session ID), which will entirely depend on the application.
 type Attendant struct {
 	// The connection and the wrapper are the main elements
 	// involved in the process. Although the wrapper will be
@@ -133,6 +135,9 @@ type Attendant struct {
 	conveyor   chan Conveyed
 	onStart    OnAttendantStart
 	onStop     OnAttendantStop
+	// Arbitrary context which will be user-specific or
+	// library-specific.
+	context    map[string]interface{}
 }
 
 
@@ -171,6 +176,27 @@ func (attendant *Attendant) Send(message *Message) error {
 	} else {
 		return AttendantIsStopped(true)
 	}
+}
+
+
+// Gets a context element by its key. Purely user-specific or
+// library-specific.
+func (attendant *Attendant) Context(key string) interface{} {
+	return attendant.context[key]
+}
+
+
+// Sets a context element by its key. Purely user-specific or
+// library-specific.
+func (attendant *Attendant) SetContext(key string, value interface{}) {
+	attendant.context[key] = value
+}
+
+
+// Removes a context element by its key. Purely user-specific or
+// library-specific.
+func (attendant *Attendant) RemoveContext(key string) {
+	delete(attendant.context, key)
 }
 
 
@@ -216,5 +242,6 @@ func NewAttendant(connection *net.TCPConn, factory MessageMarshaler, conveyor ch
 		conveyor: conveyor,
 		onStart: onStart,
 		onStop: onStop,
+		context: make(map[string]interface{}),
 	}
 }
