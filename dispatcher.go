@@ -85,10 +85,10 @@ func (server *Dispatcher) Run(host string) (func(), error) {
 		if server.onStart != nil {
 			server.onStart(server, finalHost)
 		}
-		for {
+		Loop: for {
 			select {
 			case <-quit:
-				break
+				break Loop
 			default:
 				if conn, err := server.listener.Accept(); err != nil {
 					if server.onAcceptError != nil {
@@ -104,7 +104,7 @@ func (server *Dispatcher) Run(host string) (func(), error) {
 		if server.onStop != nil {
 			server.onStop(server)
 		}
-		server.listener.Close()
+		_ = server.listener.Close()
 		server.listener = nil
 	}()
 	return func() { quit<- 1 }, nil
