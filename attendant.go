@@ -3,6 +3,7 @@ package chasqui
 import (
 	"io"
 	"net"
+	"time"
 )
 
 
@@ -77,6 +78,13 @@ type OnAttendantStart func(*Attendant)
 type OnAttendantStop func(*Attendant, AttendantStopType, error)
 
 
+// Callback to report a throttled message. It takes the attendant
+// that throttled a message, the throttled message, the instant
+// when the message was throttled, and the duration between the
+// throttle instance and the throttle reference time.
+type OnThrottle func(*Attendant, *Message, time.Time, time.Duration)
+
+
 // Attendants are spawned objects and routines for a single
 // incoming connection. They are created using certain protocol
 // factory (an instance of MessageMarshaler), are connected to
@@ -125,19 +133,31 @@ type Attendant struct {
 	// involved in the process. Although the wrapper will be
 	// the object being used the most to send/receive data,
 	// the connection is still needed to close it on need.
-	connection *net.TCPConn
-	wrapper    MessageMarshaler
+	connection   *net.TCPConn
+	wrapper      MessageMarshaler
 	// An internal status will also be needed, to track what
 	// happens in the read loop and to trigger the proper
 	// close event.
-	status     AttendantStatus
+	status       AttendantStatus
 	// Now, the two needed events and the "conveyor".
-	conveyor   chan Conveyed
-	onStart    OnAttendantStart
-	onStop     OnAttendantStop
+	conveyor     chan Conveyed
+	onStart      OnAttendantStart
+	onStop       OnAttendantStop
 	// Arbitrary context which will be user-specific or
 	// library-specific.
-	context    map[string]interface{}
+	context      map[string]interface{}
+	// Throttling involves a mean to have dead time in which
+	// the read loop does not process any message. Those dead
+	// times occur after the last processed message, and they
+	// don't use to be greater than 1 second in most applications
+	// or games (although certain particular requests may have
+	// different throttling times, a "general" throttling time
+	// should seldom be > 1s). If using a throttle interval of
+	// 0, no throttle will occur at all. The throttle interval
+	// may be changed later.
+	throttle     time.Duration
+	throttleFrom time.Time
+	onThrottle   OnThrottle
 }
 
 
@@ -200,6 +220,22 @@ func (attendant *Attendant) RemoveContext(key string) {
 }
 
 
+// Gets the throttle time for the current attendant.
+func (attendant *Attendant) Throttle() time.Duration {
+	return attendant.throttle
+}
+
+
+// Sets the throttle time for the current attendant.
+// Negative throttle times will be negated, to positive.
+func (attendant *Attendant) SetThrottle(throttle time.Duration) {
+	if throttle < 0 {
+		throttle = -throttle
+	}
+	attendant.throttle = throttle
+}
+
+
 // The read loop will attempt reading all the available data until
 // it finds a gracefully-closed error, an extraneous error, or it
 // was told to close beforehand. Received messages will be conveyed
@@ -225,16 +261,47 @@ func (attendant *Attendant) readLoop() {
 			}
 			return
 		} else {
-			// Moves the message to the conveyor channel.
-			attendant.conveyor <- Conveyed{attendant, message}
+			// The message arrived successfully, but the throttle must be
+			// checked now to tell whether the conveyor must pass the new
+			// message, or not.
+			if attendant.throttle == 0 {
+				// No throttle is being used right now. It counts as "ok".
+				// Moves the message to the conveyor channel.
+				attendant.conveyor <- Conveyed{attendant, message}
+			} else if attendant.throttleFrom == (time.Time{}) {
+				// Throttle is being used, but this is the first message
+				// being received (no throttle can occur for it). It counts
+				// as "ok" but the current time will be stored for the next
+				// throttle.
+				attendant.throttleFrom = time.Now()
+				attendant.conveyor <- Conveyed{attendant, message}
+			} else {
+				// Now a throttle check starts. This means that if the lapse
+				// between the current time and the previous message time is
+				// greater than or equal to the throttle time, it counts as
+				// "ok" but the current time will be stored for the next
+				// throttle check. Otherwise, the message is throttled and
+				// not processed.
+				now := time.Now()
+				lapse := now.Sub(attendant.throttleFrom)
+				if lapse >= attendant.throttle {
+					attendant.throttleFrom = now
+					attendant.conveyor <- Conveyed{attendant, message}
+				} else {
+					attendant.onThrottle(attendant, message, now, lapse)
+				}
+			}
 		}
 	}
 }
 
 
 // Creates a new attendant, ready to be used.
-func NewAttendant(connection *net.TCPConn, factory MessageMarshaler, conveyor chan Conveyed,
-	              onStart OnAttendantStart, onStop OnAttendantStop) *Attendant {
+func NewAttendant(connection *net.TCPConn, factory MessageMarshaler, conveyor chan Conveyed, throttle time.Duration,
+	              onStart OnAttendantStart, onStop OnAttendantStop, onThrottle OnThrottle) *Attendant {
+	if throttle < 0 {
+		throttle = -throttle
+	}
 	return &Attendant{
 		connection: connection,
 		wrapper: factory.Create(connection),
@@ -243,5 +310,7 @@ func NewAttendant(connection *net.TCPConn, factory MessageMarshaler, conveyor ch
 		onStart: onStart,
 		onStop: onStop,
 		context: make(map[string]interface{}),
+		throttle: throttle,
+		onThrottle: onThrottle,
 	}
 }
