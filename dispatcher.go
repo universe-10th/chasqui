@@ -18,22 +18,22 @@ func (AlreadyListeningError) Error() string {
 
 // Callback to report when an dispatcher successfully ran
 // its lifecycle.
-type OnStart func(*Dispatcher, *net.TCPAddr)
+type OnDispatcherStart func(*Dispatcher, *net.TCPAddr)
 
 
 // Callback to report when an dispatcher could successfully
 // accept an incoming connection.
-type OnAcceptSuccess func(*Dispatcher, *net.TCPConn)
+type OnDispatcherAcceptSuccess func(*Dispatcher, *net.TCPConn)
 
 
 // Callback to report when an dispatcher failed to accept
 // an incoming connection.
-type OnAcceptError func(*Dispatcher, error)
+type OnDispatcherAcceptError func(*Dispatcher, error)
 
 
 // Callback to report when an dispatcher successfully ended
 // its lifecycle.
-type OnStop func(*Dispatcher)
+type OnDispatcherStop func(*Dispatcher)
 
 
 // A server lifecycle for TCP sockets. It does not provide
@@ -49,10 +49,10 @@ type OnStop func(*Dispatcher)
 type Dispatcher struct {
 	mutex           sync.Mutex
 	listener        *net.TCPListener
-	onStart         OnStart
-	onAcceptSuccess OnAcceptSuccess
-	onAcceptError   OnAcceptError
-	onStop          OnStop
+	onStart         OnDispatcherStart
+	onAcceptSuccess OnDispatcherAcceptSuccess
+	onAcceptError   OnDispatcherAcceptError
+	onStop          OnDispatcherStop
 }
 
 
@@ -112,8 +112,8 @@ func (server *Dispatcher) Run(host string) (func(), error) {
 
 
 // Creates a new dispatcher, ready to be used.
-func NewDispatcher(onStart OnStart, onAcceptSuccess OnAcceptSuccess,
-				   onAcceptError OnAcceptError, onStop OnStop) *Dispatcher {
+func NewDispatcher(onStart OnDispatcherStart, onAcceptSuccess OnDispatcherAcceptSuccess,
+				   onAcceptError OnDispatcherAcceptError, onStop OnDispatcherStop) *Dispatcher {
 	return &Dispatcher{
 		onStart: onStart,
 		onAcceptSuccess: onAcceptSuccess,
