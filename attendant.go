@@ -128,6 +128,10 @@ type OnThrottle func(*Attendant, *Message, time.Time, time.Duration)
 // An internal state of the attendant will also be kept.
 // Also, each attendant will hold its own data (e.g. current
 // session ID), which will entirely depend on the application.
+//
+// Attendants can be used both in servers and clients (in these
+// cases, they become particularly useful when there are many
+// clients connecting to many different servers).
 type Attendant struct {
 	// The connection and the wrapper are the main elements
 	// involved in the process. Although the wrapper will be
