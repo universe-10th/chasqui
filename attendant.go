@@ -166,7 +166,9 @@ type Attendant struct {
 func (attendant *Attendant) Start() error {
 	if attendant.status == AttendantNew {
 		attendant.status = AttendantRunning
-		attendant.onStart(attendant)
+		if attendant.onStart != nil {
+			attendant.onStart(attendant)
+		}
 		go attendant.readLoop()
 		return nil
 	} else {
@@ -179,7 +181,9 @@ func (attendant *Attendant) Start() error {
 // sets the end state and triggers the close event.
 func (attendant *Attendant) Stop() error {
 	if attendant.status != AttendantStopped {
-		attendant.onStop(attendant, AttendantLocalStop, nil)
+		if attendant.onStop != nil {
+			attendant.onStop(attendant, AttendantLocalStop, nil)
+		}
 		_ = attendant.connection.Close()
 		attendant.status = AttendantStopped
 		return nil
@@ -249,12 +253,16 @@ func (attendant *Attendant) readLoop() {
 					// start a read operation because the underlying socket
 					// is already closed and the decoder implementation uses
 					// the io.ErrClosedPipe for those cases.
-					attendant.onStop(attendant, AttendantRemoteStop, nil)
+					if attendant.onStop != nil {
+						attendant.onStop(attendant, AttendantRemoteStop, nil)
+					}
 				} else {
 					// This error is not a graceful close.
 					// It may be a non-graceful close or a decoding error.
 					// net.Error objects are usually non-graceful errors.
-					attendant.onStop(attendant, AttendantAbnormalStop, nil)
+					if attendant.onStop != nil {
+						attendant.onStop(attendant, AttendantAbnormalStop, nil)
+					}
 					_ = attendant.connection.Close()
 				}
 				attendant.status = AttendantStopped
