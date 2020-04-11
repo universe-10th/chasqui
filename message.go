@@ -23,7 +23,7 @@ type Message interface {
 // The first channel to use is the Queue. Each socket
 // has two queues: one for the received messages and
 // another one for the sent messages.
-type Queue chan Message
+type Queue chan *Message
 
 
 // Message Marshalers are wrappers around a read-write
