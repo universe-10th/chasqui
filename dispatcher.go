@@ -7,16 +7,16 @@ import (
 
 
 // Error that tells when a server is already listening.
-type AlreadyListeningError bool
+type DispatcherAlreadyListeningError bool
 
 
 // The error message.
-func (AlreadyListeningError) Error() string {
+func (DispatcherAlreadyListeningError) Error() string {
 	return "server already listening"
 }
 
 
-// Callback to report when an dispatcher successfully ran
+// Callback to report when a dispatcher successfully ran
 // its lifecycle.
 type OnDispatcherStart func(*Dispatcher, *net.TCPAddr)
 
