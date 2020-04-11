@@ -16,24 +16,24 @@ func (AlreadyListeningError) Error() string {
 }
 
 
-// Callback to report when an attendant successfully ran
+// Callback to report when an dispatcher successfully ran
 // its lifecycle.
-type OnStart func(*Attendant, *net.TCPAddr)
+type OnStart func(*Dispatcher, *net.TCPAddr)
 
 
-// Callback to report when an attendant could successfully
+// Callback to report when an dispatcher could successfully
 // accept an incoming connection.
-type OnAcceptSuccess func(*Attendant, *net.TCPConn)
+type OnAcceptSuccess func(*Dispatcher, *net.TCPConn)
 
 
-// Callback to report when an attendant failed to accept
+// Callback to report when an dispatcher failed to accept
 // an incoming connection.
-type OnAcceptError func(*Attendant, error)
+type OnAcceptError func(*Dispatcher, error)
 
 
-// Callback to report when an attendant successfully ended
+// Callback to report when an dispatcher successfully ended
 // its lifecycle.
-type OnStop func(*Attendant)
+type OnStop func(*Dispatcher)
 
 
 // A server lifecycle for TCP sockets. It does not provide
@@ -46,7 +46,7 @@ type OnStop func(*Attendant)
 // error or a "closer" function: a function with no args /
 // return value that will close the server. This implies
 // that the lifecycle will run on its own goroutine.
-type Attendant struct {
+type Dispatcher struct {
 	mutex           sync.Mutex
 	listener        *net.TCPListener
 	onStart         OnStart
@@ -59,7 +59,7 @@ type Attendant struct {
 // Runs the server lifecycle in a separate goroutine. The
 // only job of this server is to run the accept loop and
 // report any error being triggered.
-func (server *Attendant) Run(host string) (func(), error) {
+func (server *Dispatcher) Run(host string) (func(), error) {
 	// Start to listen, and keep the listener.
 	var finalHost *net.TCPAddr
 	server.mutex.Lock()
@@ -111,10 +111,10 @@ func (server *Attendant) Run(host string) (func(), error) {
 }
 
 
-// Creates a new attendant, ready to be used.
-func NewAttendant(onStart OnStart, onAcceptSuccess OnAcceptSuccess,
-				  onAcceptError OnAcceptError, onStop OnStop) *Attendant {
-	return &Attendant{
+// Creates a new dispatcher, ready to be used.
+func NewDispatcher(onStart OnStart, onAcceptSuccess OnAcceptSuccess,
+				  onAcceptError OnAcceptError, onStop OnStop) *Dispatcher {
+	return &Dispatcher{
 		onStart: onStart,
 		onAcceptSuccess: onAcceptSuccess,
 		onAcceptError: onAcceptError,
