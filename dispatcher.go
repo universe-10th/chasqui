@@ -16,6 +16,16 @@ func (DispatcherAlreadyListeningError) Error() string {
 }
 
 
+// Error that tells when a server is not listening.
+type DispatcherNotListeningError bool
+
+
+// The error message.
+func (DispatcherNotListeningError) Error() string {
+	return "server not listening"
+}
+
+
 // Callback to report when a dispatcher successfully ran
 // its lifecycle.
 type OnDispatcherStart func(*Dispatcher, *net.TCPAddr)
@@ -56,26 +66,37 @@ type Dispatcher struct {
 }
 
 
+// Returns the current listen address of the dispatcher,
+// if running. Returns an error if it is not running.
+func (dispatcher *Dispatcher) Addr() (net.Addr, error) {
+	if dispatcher.listener != nil {
+		return dispatcher.listener.Addr(), nil
+	} else {
+		return nil, DispatcherNotListeningError(true)
+	}
+}
+
+
 // Runs the server lifecycle in a separate goroutine. The
 // only job of this server is to run the accept loop and
 // report any error being triggered.
-func (server *Dispatcher) Run(host string) (func(), error) {
-	if server.listener != nil {
+func (dispatcher *Dispatcher) Run(host string) (func(), error) {
+	if dispatcher.listener != nil {
 		return nil, DispatcherAlreadyListeningError(true)
 	}
 
 	// Start to listen, and keep the listener.
 	var finalHost *net.TCPAddr
-	server.mutex.Lock()
+	dispatcher.mutex.Lock()
 	if host, errHost := net.ResolveTCPAddr("tcp", host); errHost != nil {
 		return nil, errHost
 	} else if listener, errListen := net.ListenTCP("tcp", host); errListen != nil {
 		return nil, errListen
 	} else {
 		finalHost = host
-		server.listener = listener
+		dispatcher.listener = listener
 	}
-	server.mutex.Unlock()
+	dispatcher.mutex.Unlock()
 
 	// Create the channel to send the quit signal.
 	quit := make(chan uint8)
@@ -86,30 +107,30 @@ func (server *Dispatcher) Run(host string) (func(), error) {
 	// got accepted the first time. The only way to
 	// stop them, is gracefully.
 	go func(){
-		if server.onStart != nil {
-			server.onStart(server, finalHost)
+		if dispatcher.onStart != nil {
+			dispatcher.onStart(dispatcher, finalHost)
 		}
 		Loop: for {
 			select {
 			case <-quit:
 				break Loop
 			default:
-				if conn, err := server.listener.Accept(); err != nil {
-					if server.onAcceptError != nil {
-						server.onAcceptError(server, err)
+				if conn, err := dispatcher.listener.Accept(); err != nil {
+					if dispatcher.onAcceptError != nil {
+						dispatcher.onAcceptError(dispatcher, err)
 					}
 				} else {
-					if server.onAcceptSuccess != nil {
-						server.onAcceptSuccess(server, conn.(*net.TCPConn))
+					if dispatcher.onAcceptSuccess != nil {
+						dispatcher.onAcceptSuccess(dispatcher, conn.(*net.TCPConn))
 					}
 				}
 			}
 		}
-		if server.onStop != nil {
-			server.onStop(server)
+		if dispatcher.onStop != nil {
+			dispatcher.onStop(dispatcher)
 		}
-		_ = server.listener.Close()
-		server.listener = nil
+		_ = dispatcher.listener.Close()
+		dispatcher.listener = nil
 	}()
 	return func() { quit<- 1 }, nil
 }
