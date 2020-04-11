@@ -60,6 +60,10 @@ type Dispatcher struct {
 // only job of this server is to run the accept loop and
 // report any error being triggered.
 func (server *Dispatcher) Run(host string) (func(), error) {
+	if server.listener != nil {
+		return nil, DispatcherAlreadyListeningError(true)
+	}
+
 	// Start to listen, and keep the listener.
 	var finalHost *net.TCPAddr
 	server.mutex.Lock()
