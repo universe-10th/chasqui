@@ -296,7 +296,9 @@ func (attendant *Attendant) readLoop() {
 					attendant.throttleFrom = now
 					attendant.conveyor <- Conveyed{attendant, message}
 				} else {
-					attendant.onThrottle(attendant, message, now, lapse)
+					if attendant.onThrottle != nil {
+						attendant.onThrottle(attendant, message, now, lapse)
+					}
 				}
 			}
 		}
