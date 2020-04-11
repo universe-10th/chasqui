@@ -113,7 +113,7 @@ func (server *Dispatcher) Run(host string) (func(), error) {
 
 // Creates a new dispatcher, ready to be used.
 func NewDispatcher(onStart OnStart, onAcceptSuccess OnAcceptSuccess,
-				  onAcceptError OnAcceptError, onStop OnStop) *Dispatcher {
+				   onAcceptError OnAcceptError, onStop OnStop) *Dispatcher {
 	return &Dispatcher{
 		onStart: onStart,
 		onAcceptSuccess: onAcceptSuccess,
