@@ -82,7 +82,7 @@ type OnAttendantStop func(*Attendant, AttendantStopType, error)
 // that throttled a message, the throttled message, the instant
 // when the message was throttled, and the duration between the
 // throttle instance and the throttle reference time.
-type OnThrottle func(*Attendant, *Message, time.Time, time.Duration)
+type OnAttendantThrottle func(*Attendant, *Message, time.Time, time.Duration)
 
 
 // Attendants are spawned objects and routines for a single
@@ -161,7 +161,7 @@ type Attendant struct {
 	// may be changed later.
 	throttle     time.Duration
 	throttleFrom time.Time
-	onThrottle   OnThrottle
+	onThrottle   OnAttendantThrottle
 }
 
 
@@ -312,7 +312,7 @@ func (attendant *Attendant) readLoop() {
 
 // Creates a new attendant, ready to be used.
 func NewAttendant(connection *net.TCPConn, factory MessageMarshaler, conveyor chan Conveyed, throttle time.Duration,
-	              onStart OnAttendantStart, onStop OnAttendantStop, onThrottle OnThrottle) *Attendant {
+	              onStart OnAttendantStart, onStop OnAttendantStop, onThrottle OnAttendantThrottle) *Attendant {
 	if throttle < 0 {
 		throttle = -throttle
 	}
