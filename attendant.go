@@ -249,7 +249,7 @@ func isClosedSocketError(err error) bool {
 	if opError, ok := err.(*net.OpError); !ok {
 		return false
 	} else {
-		// Notes: this message is literally the polls.ErrNetClosing message,
+		// Notes: this error is literally the polls.ErrNetClosing error,
 		// but it is illegal to import internals/poll.
 		err = opError.Err
 		return err == ErrNetClosing()
