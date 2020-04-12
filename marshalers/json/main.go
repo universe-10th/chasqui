@@ -9,30 +9,30 @@ import (
 
 // The internal struture tu pass JSON objects.
 type message struct {
-	command string
-	args    Args
-	kwargs  KWArgs
+	C   string
+	A   Args
+	KWA KWArgs
 }
 
 
 // Retrieves the command of this message, as
 // per the interface implementation.
 func (msg message) Command() string {
-	return msg.command
+	return msg.C
 }
 
 
 // Retrieves the args of this message, as
 // per the interface implementation.
 func (msg message) Args() Args {
-	return msg.args
+	return msg.A
 }
 
 
 // Retrieves the kwargs of this message, as
 // per the interface implementation.
 func (msg message) KWArgs() KWArgs {
-	return msg.kwargs
+	return msg.KWA
 }
 
 
