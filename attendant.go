@@ -63,7 +63,7 @@ const (
 // that received and conveyed it.
 type Conveyed struct {
 	Attendant *Attendant
-	Message   *Message
+	Message   Message
 }
 
 
@@ -82,7 +82,7 @@ type OnAttendantStop func(*Attendant, AttendantStopType, error)
 // that throttled a message, the throttled message, the instant
 // when the message was throttled, and the duration between the
 // throttle instance and the throttle reference time.
-type OnAttendantThrottle func(*Attendant, *Message, time.Time, time.Duration)
+type OnAttendantThrottle func(*Attendant, Message, time.Time, time.Duration)
 
 
 // Attendants are spawned objects and routines for a single

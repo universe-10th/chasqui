@@ -27,7 +27,7 @@ type Message interface {
 // constructor taking a read-writer and creating the
 // wrapper for it.
 type MessageMarshaler interface {
-	Receive()                                                               (*Message, error)
+	Receive()                                                               (Message, error)
 	Send(command string, args []interface{}, kwargs map[string]interface{}) error
 	// Constructor - Creates a new marshaler by its buffer.
 	Create(io.ReadWriter)                                                   MessageMarshaler
