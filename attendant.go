@@ -251,7 +251,8 @@ func isClosedSocketError(err error) bool {
 	} else {
 		// Notes: this message is literally the polls.ErrNetClosing message,
 		// but it is illegal to import internals/poll.
-		return opError.Err.Error() == "use of closed network connection"
+		err = opError.Err
+		return err == ErrNetClosing()
 	}
 }
 
