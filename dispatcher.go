@@ -129,7 +129,8 @@ func (dispatcher *Dispatcher) Run(host string) (func(), error) {
 		if dispatcher.onStop != nil {
 			dispatcher.onStop(dispatcher)
 		}
-		_ = dispatcher.listener.Close()
+		// noinspection GoUnhandledErrorResult
+		dispatcher.listener.Close()
 		dispatcher.listener = nil
 	}()
 	return func() { quit<- 1 }, nil

@@ -20,7 +20,8 @@ func MakeClient(host, clientName string, onExtraClose func()) (*chasqui.Attendan
 		quitChannel := make(chan bool)
 
 		onClientStart := func(attendant *chasqui.Attendant) {
-			_ = attendant.Send("NAME", Args{clientName}, nil)
+			// noinspection GoUnhandledErrorResult
+			attendant.Send("NAME", Args{clientName}, nil)
 			go func() {
 				Loop: for {
 					select {

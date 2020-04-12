@@ -30,9 +30,11 @@ func started(server *chasqui.BasicServer, addr *net.TCPAddr) {
 					args := message.Args()
 					if len(args) == 1 {
 						attendant.SetContext("name", args[0])
-						_ = attendant.Send("NAME_OK", Args{args[0]}, nil)
+						// noinspection GoUnhandledErrorResult
+						attendant.Send("NAME_OK", Args{args[0]}, nil)
 					} else {
-						_ = attendant.Send("NAME_MISSING", nil, nil)
+						// noinspection GoUnhandledErrorResult
+						attendant.Send("NAME_MISSING", nil, nil)
 					}
 				case "SHOUT":
 					args := message.Args()
@@ -72,13 +74,15 @@ func stopped(server *chasqui.BasicServer) {
 
 
 func attendantStarted(attendant *chasqui.Attendant) {
-	_ = attendant.Send("Hello", nil, nil)
+	// noinspection GoUnhandledErrorResult
+	attendant.Send("Hello", nil, nil)
 }
 
 
 func attendantStopped(attendant *chasqui.Attendant, stopType chasqui.AttendantStopType, err error) {
 	fmt.Printf("This connection is stopping: %d, %s\n", stopType, err)
-	_ = attendant.Send("Good bye", nil, nil)
+	// noinspection GoUnhandledErrorResult
+	attendant.Send("Good bye", nil, nil)
 }
 
 

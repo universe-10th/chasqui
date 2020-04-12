@@ -189,7 +189,8 @@ func (attendant *Attendant) Stop() error {
 		if attendant.onStop != nil {
 			attendant.onStop(attendant, AttendantLocalStop, nil)
 		}
-		_ = attendant.connection.Close()
+		// noinspection GoUnhandledErrorResult
+		attendant.connection.Close()
 		attendant.status = AttendantStopped
 		return nil
 	} else {
@@ -280,7 +281,8 @@ func (attendant *Attendant) readLoop() {
 					if attendant.status == AttendantRunning && attendant.onStop != nil {
 						attendant.onStop(attendant, AttendantAbnormalStop, err)
 					}
-					_ = attendant.connection.Close()
+					// noinspection GoUnhandledErrorResult
+					attendant.connection.Close()
 				}
 				attendant.status = AttendantStopped
 			}

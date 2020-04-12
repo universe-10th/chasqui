@@ -56,7 +56,8 @@ func main() {
 				}
 			case "stop":
 				if attendant, ok := clients[parts[1]]; ok {
-					_ = attendant.Stop()
+					// noinspection GoUnhandledErrorResult
+					attendant.Stop()
 				} else {
 					fmt.Printf("Invalid or unknown name: %s\n", parts[1])
 				}
