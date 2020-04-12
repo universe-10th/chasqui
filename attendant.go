@@ -1,7 +1,7 @@
 package chasqui
 
 import (
-	"github.com/universe-10th/chasqui/types"
+	. "github.com/universe-10th/chasqui/types"
 	"io"
 	"net"
 	"time"
@@ -64,7 +64,7 @@ const (
 // that received and conveyed it.
 type Conveyed struct {
 	Attendant *Attendant
-	Message   types.Message
+	Message   Message
 }
 
 
@@ -83,7 +83,7 @@ type OnAttendantStop func(*Attendant, AttendantStopType, error)
 // that throttled a message, the throttled message, the instant
 // when the message was throttled, and the duration between the
 // throttle instance and the throttle reference time.
-type OnAttendantThrottle func(*Attendant, types.Message, time.Time, time.Duration)
+type OnAttendantThrottle func(*Attendant, Message, time.Time, time.Duration)
 
 
 // Attendants are spawned objects and routines for a single
@@ -138,8 +138,8 @@ type Attendant struct {
 	// involved in the process. Although the wrapper will be
 	// the object being used the most to send/receive data,
 	// the connection is still needed to close it on need.
-	connection *net.TCPConn
-	wrapper    types.MessageMarshaler
+	connection   *net.TCPConn
+	wrapper      MessageMarshaler
 	// An internal status will also be needed, to track what
 	// happens in the read loop and to trigger the proper
 	// close event.
@@ -199,7 +199,7 @@ func (attendant *Attendant) Stop() error {
 
 
 // Writes a message via the connection, if it is not closed.
-func (attendant *Attendant) Send(command string, args []interface{}, kwargs map[string]interface{}) error {
+func (attendant *Attendant) Send(command string, args Args, kwargs KWArgs) error {
 	if attendant.status != AttendantStopped {
 		return attendant.wrapper.Send(command, args, kwargs)
 	} else {
@@ -312,7 +312,7 @@ func (attendant *Attendant) readLoop() {
 
 
 // Creates a new attendant, ready to be used.
-func NewAttendant(connection *net.TCPConn, factory types.MessageMarshaler, conveyor chan Conveyed, throttle time.Duration,
+func NewAttendant(connection *net.TCPConn, factory MessageMarshaler, conveyor chan Conveyed, throttle time.Duration,
 	              onStart OnAttendantStart, onStop OnAttendantStop, onThrottle OnAttendantThrottle) *Attendant {
 	if throttle < 0 {
 		throttle = -throttle
