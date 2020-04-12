@@ -4,6 +4,7 @@ import (
 	. "github.com/universe-10th/chasqui/types"
 	"io"
 	"net"
+	"sync"
 	"time"
 )
 
@@ -134,6 +135,7 @@ type OnAttendantThrottle func(*Attendant, Message, time.Time, time.Duration)
 // cases, they become particularly useful when there are many
 // clients connecting to many different servers).
 type Attendant struct {
+	mutex        sync.Mutex
 	// The connection and the wrapper are the main elements
 	// involved in the process. Although the wrapper will be
 	// the object being used the most to send/receive data,
@@ -185,6 +187,8 @@ func (attendant *Attendant) Start() error {
 // Closes the attendant (it will also end its read loop), also
 // sets the end state and triggers the close event.
 func (attendant *Attendant) Stop() error {
+	attendant.mutex.Lock()
+	defer attendant.mutex.Unlock()
 	if attendant.status != AttendantStopped {
 		if attendant.onStop != nil {
 			attendant.onStop(attendant, AttendantLocalStop, nil)
@@ -265,27 +269,38 @@ func isClosedSocketError(err error) bool {
 func (attendant *Attendant) readLoop() {
 	for {
 		if message, err := attendant.wrapper.Receive(); err != nil {
-			if attendant.status == AttendantRunning {
-				if err == io.EOF || err == io.ErrClosedPipe || isClosedSocketError(err) {
+			closedError := isClosedSocketError(err)
+			running := attendant.status == AttendantRunning
+			// We wait a mutex to avoid eventual race conditions when
+			// manually invoking the .Stop method.
+			attendant.mutex.Lock()
+			attendant.mutex.Unlock()
+			if running && !closedError {
+				if err == io.EOF || err == io.ErrClosedPipe {
 					// This error is a graceful close, or a rejection to
 					// start a read operation because the underlying socket
 					// is already closed and the decoder implementation uses
 					// the io.ErrClosedPipe for those cases.
-					if attendant.status == AttendantRunning && attendant.onStop != nil {
+					if attendant.onStop != nil {
 						attendant.onStop(attendant, AttendantRemoteStop, nil)
 					}
 				} else {
 					// This error is not a graceful close.
 					// It may be a non-graceful close or a decoding error.
 					// net.Error objects are usually non-graceful errors.
-					if attendant.status == AttendantRunning && attendant.onStop != nil {
+					if attendant.onStop != nil {
 						attendant.onStop(attendant, AttendantAbnormalStop, err)
 					}
 					// noinspection GoUnhandledErrorResult
 					attendant.connection.Close()
 				}
-				attendant.status = AttendantStopped
 			}
+			// Notice how errors when not running or ErrNetClosing error
+			// cause this routine to end, but they are not reported. This
+			// because no error matters outside a running state, and for
+			// the ErrNetClosing error, it was most likely caused by the
+			// user invoking .Stop() on the attendant.
+			attendant.status = AttendantStopped
 			return
 		} else {
 			// The message arrived successfully, but the throttle must be
