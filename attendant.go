@@ -198,9 +198,9 @@ func (attendant *Attendant) Stop() error {
 
 
 // Writes a message via the connection, if it is not closed.
-func (attendant *Attendant) Send(message *Message) error {
+func (attendant *Attendant) Send(command string, args []interface{}, kwargs map[string]interface{}) error {
 	if attendant.status != AttendantStopped {
-		return attendant.wrapper.Send(message)
+		return attendant.wrapper.Send(command, args, kwargs)
 	} else {
 		return AttendantIsStopped(true)
 	}
