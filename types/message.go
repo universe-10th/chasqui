@@ -3,6 +3,10 @@ package types
 import "io"
 
 
+type Args []interface{}
+type KWArgs map[string]interface{}
+
+
 // Messages are flow bundles that will exist in
 // either direction. Clients will usually use them
 // to invoke an action or perform a request, while
@@ -15,8 +19,8 @@ import "io"
 // will implement this interface.
 type Message interface {
 	Command() string
-	Args()    []interface{}
-	KWArgs()  map[string]interface{}
+	Args()    Args
+	KWArgs()  KWArgs
 }
 
 
@@ -27,8 +31,8 @@ type Message interface {
 // constructor taking a read-writer and creating the
 // wrapper for it.
 type MessageMarshaler interface {
-	Receive()                                                               (Message, error)
-	Send(command string, args []interface{}, kwargs map[string]interface{}) error
+	Receive()                                      (Message, error)
+	Send(command string, args Args, kwargs KWArgs) error
 	// Constructor - Creates a new marshaler by its buffer.
-	Create(io.ReadWriter)                                                   MessageMarshaler
+	Create(io.ReadWriter)                          MessageMarshaler
 }
