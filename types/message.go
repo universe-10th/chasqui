@@ -1,4 +1,4 @@
-package chasqui
+package types
 
 import "io"
 

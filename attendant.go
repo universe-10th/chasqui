@@ -1,6 +1,7 @@
 package chasqui
 
 import (
+	"github.com/universe-10th/chasqui/types"
 	"io"
 	"net"
 	"time"
@@ -63,7 +64,7 @@ const (
 // that received and conveyed it.
 type Conveyed struct {
 	Attendant *Attendant
-	Message   Message
+	Message   types.Message
 }
 
 
@@ -82,7 +83,7 @@ type OnAttendantStop func(*Attendant, AttendantStopType, error)
 // that throttled a message, the throttled message, the instant
 // when the message was throttled, and the duration between the
 // throttle instance and the throttle reference time.
-type OnAttendantThrottle func(*Attendant, Message, time.Time, time.Duration)
+type OnAttendantThrottle func(*Attendant, types.Message, time.Time, time.Duration)
 
 
 // Attendants are spawned objects and routines for a single
@@ -137,8 +138,8 @@ type Attendant struct {
 	// involved in the process. Although the wrapper will be
 	// the object being used the most to send/receive data,
 	// the connection is still needed to close it on need.
-	connection   *net.TCPConn
-	wrapper      MessageMarshaler
+	connection *net.TCPConn
+	wrapper    types.MessageMarshaler
 	// An internal status will also be needed, to track what
 	// happens in the read loop and to trigger the proper
 	// close event.
@@ -311,7 +312,7 @@ func (attendant *Attendant) readLoop() {
 
 
 // Creates a new attendant, ready to be used.
-func NewAttendant(connection *net.TCPConn, factory MessageMarshaler, conveyor chan Conveyed, throttle time.Duration,
+func NewAttendant(connection *net.TCPConn, factory types.MessageMarshaler, conveyor chan Conveyed, throttle time.Duration,
 	              onStart OnAttendantStart, onStop OnAttendantStop, onThrottle OnAttendantThrottle) *Attendant {
 	if throttle < 0 {
 		throttle = -throttle

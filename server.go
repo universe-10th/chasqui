@@ -1,6 +1,7 @@
 package chasqui
 
 import (
+	"github.com/universe-10th/chasqui/types"
 	"net"
 	"time"
 )
@@ -95,7 +96,7 @@ func (basicServer *BasicServer) Enumerate(callback func(*Attendant)) {
 
 // Creates a new server by configuring a marshaler factory, the conveyor buffer size,
 // the default throttle time, and all the callbacks.
-func NewServer(factory MessageMarshaler, conveyorBufferSize int, defaultThrottle time.Duration,
+func NewServer(factory types.MessageMarshaler, conveyorBufferSize int, defaultThrottle time.Duration,
 	           onServerStart OnBasicServerStart, onServerAcceptError OnBasicServerAcceptError,
 	           onServerStop OnBasicServerStop, onAttendantStart OnAttendantStart,
 	           onAttendantStop OnAttendantStop, onAttendantThrottle OnAttendantThrottle) *BasicServer {
