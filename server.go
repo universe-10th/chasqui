@@ -63,7 +63,8 @@ func (basicServer *BasicServer) Stop() error {
 	} else {
 		basicServer.closer()
 		basicServer.Enumerate(func(attendant *Attendant) {
-			_ = attendant.Stop()
+			// noinspection GoUnhandledErrorResult
+			attendant.Stop()
 		})
 		basicServer.attendants = Attendants{}
 		basicServer.closer = nil
@@ -135,7 +136,8 @@ func NewServer(factory MessageMarshaler, conveyorBufferSize int, defaultThrottle
 			onAttendantStart, onAttendantStopWrapper, onAttendantThrottle,
 		)
 		basicServer.attendants[attendant] = true
-		_ = attendant.Start()
+		// noinspection GoUnhandledErrorResult
+		attendant.Start()
 	}
 	basicServer.dispatcher = NewDispatcher(onDispatcherStart, onDispatcherAcceptSuccess,
 		                                   onDispatcherAcceptError, onDispatcherStop)
