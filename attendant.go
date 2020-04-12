@@ -245,6 +245,17 @@ func (attendant *Attendant) SetThrottle(throttle time.Duration) {
 }
 
 
+func isClosedSocketError(err error) bool {
+	if opError, ok := err.(*net.OpError); !ok {
+		return false
+	} else {
+		// Notes: this message is literally the polls.ErrNetClosing message,
+		// but it is illegal to import internals/poll.
+		return opError.Err.Error() == "use of closed network connection"
+	}
+}
+
+
 // The read loop will attempt reading all the available data until
 // it finds a gracefully-closed error, an extraneous error, or it
 // was told to close beforehand. Received messages will be conveyed
@@ -253,20 +264,20 @@ func (attendant *Attendant) readLoop() {
 	for {
 		if message, err := attendant.wrapper.Receive(); err != nil {
 			if attendant.status == AttendantRunning {
-				if err == io.EOF || err == io.ErrClosedPipe {
+				if err == io.EOF || err == io.ErrClosedPipe || isClosedSocketError(err) {
 					// This error is a graceful close, or a rejection to
 					// start a read operation because the underlying socket
 					// is already closed and the decoder implementation uses
 					// the io.ErrClosedPipe for those cases.
-					if attendant.onStop != nil {
+					if attendant.status == AttendantRunning && attendant.onStop != nil {
 						attendant.onStop(attendant, AttendantRemoteStop, nil)
 					}
 				} else {
 					// This error is not a graceful close.
 					// It may be a non-graceful close or a decoding error.
 					// net.Error objects are usually non-graceful errors.
-					if attendant.onStop != nil {
-						attendant.onStop(attendant, AttendantAbnormalStop, nil)
+					if attendant.status == AttendantRunning && attendant.onStop != nil {
+						attendant.onStop(attendant, AttendantAbnormalStop, err)
 					}
 					_ = attendant.connection.Close()
 				}

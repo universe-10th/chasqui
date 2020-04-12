@@ -1,9 +1,9 @@
 package chasqui
 
 import (
+	. "github.com/universe-10th/chasqui/types"
 	"net"
 	"time"
-	. "github.com/universe-10th/chasqui/types"
 )
 
 
