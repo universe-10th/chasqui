@@ -133,7 +133,7 @@ func (dispatcher *Dispatcher) Run(host string) (func(), error) {
 		dispatcher.listener.Close()
 		dispatcher.listener = nil
 	}()
-	return func() { quit<- 1 }, nil
+	return func() { close(quit) }, nil
 }
 
 
