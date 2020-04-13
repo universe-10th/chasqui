@@ -11,19 +11,19 @@ import (
 type Attendants map[*Attendant]bool
 
 
-// Callback to report when a server successfully ran
-// its lifecycle.
-type OnBasicServerStart func(*BasicServer, *net.TCPAddr)
+// Event reporting the server has started.
+type BasicServerStartedEvent struct {
+	Addr   *net.TCPAddr
+}
 
 
-// Callback to report when a server failed to accept
-// an incoming connection.
-type OnBasicServerAcceptError func(*BasicServer, error)
+// Event reporting the server encountered
+// an error when accepting a connection.
+type BasicServerAcceptFailedEvent error
 
 
-// Callback to report when a server successfully ended
-// its lifecycle.
-type OnBasicServerStop func(*BasicServer)
+// Event reporting the server has stopped.
+type BasicServerStoppedEvent uint8
 
 
 // A default teamwork of a dispatcher and all the
@@ -36,10 +36,16 @@ type OnBasicServerStop func(*BasicServer)
 // the flows of the attendants to the flow of the
 // dispatcher.
 type BasicServer struct {
-	dispatcher *Dispatcher
-	attendants Attendants
-	conveyor   chan Conveyed
-	closer     func()
+	dispatcher            *Dispatcher
+	attendants            Attendants
+	startedEvent          chan BasicServerStartedEvent
+	acceptFailedEvent     chan BasicServerAcceptFailedEvent
+	attendantStartedEvent chan AttendantStartedEvent
+	messageEvent          chan MessageEvent
+	throttledEvent        chan ThrottledEvent
+	attendantStoppedEvent chan AttendantStoppedEvent
+	stoppedEvent          chan BasicServerStoppedEvent
+	closer                func()
 }
 
 
@@ -73,9 +79,45 @@ func (basicServer *BasicServer) Stop() error {
 }
 
 
-// Returns a read-only channel with all the conveyed messages.
-func (basicServer *BasicServer) Conveyor() <-chan Conveyed {
-	return basicServer.conveyor
+// Returns a read-only channel with all the "started" events.
+func (basicServer *BasicServer) StartedEvent() <-chan BasicServerStartedEvent {
+	return basicServer.startedEvent
+}
+
+
+// Returns a read-only channel with all the "accept failed" events.
+func (basicServer *BasicServer) AcceptFailedEvent() <-chan BasicServerAcceptFailedEvent {
+	return basicServer.acceptFailedEvent
+}
+
+
+// Returns a read-only channel with all the "attendant started" events.
+func (basicServer *BasicServer) AttendantStartedEvent() <-chan AttendantStartedEvent {
+	return basicServer.attendantStartedEvent
+}
+
+
+// Returns a read-only channel with all the received messages.
+func (basicServer *BasicServer) MessageEvent() <-chan MessageEvent {
+	return basicServer.messageEvent
+}
+
+
+// Returns a read-only channel with all the "throttled" events.
+func (basicServer *BasicServer) ThrottledEvent() <-chan ThrottledEvent {
+	return basicServer.throttledEvent
+}
+
+
+// Returns a read-only channel with all the "attendant stopped" events.
+func (basicServer *BasicServer) AttendantStoppedEvent() <-chan AttendantStoppedEvent {
+	return basicServer.attendantStoppedEvent
+}
+
+
+// Returns a read-only channel with all the "stopped" events.
+func (basicServer *BasicServer) StoppedEvent() <-chan BasicServerStoppedEvent {
+	return basicServer.stoppedEvent
 }
 
 
@@ -95,47 +137,69 @@ func (basicServer *BasicServer) Enumerate(callback func(*Attendant)) {
 }
 
 
-// Creates a new server by configuring a marshaler factory, the conveyor buffer size,
-// the default throttle time, and all the callbacks.
-func NewServer(factory MessageMarshaler, conveyorBufferSize int, defaultThrottle time.Duration,
-	           onServerStart OnBasicServerStart, onServerAcceptError OnBasicServerAcceptError,
-	           onServerStop OnBasicServerStop, onAttendantStart OnAttendantStart,
-	           onAttendantStop OnAttendantStop, onAttendantThrottle OnAttendantThrottle) *BasicServer {
+// Creates a new server by configuring a marshaler factory, the channel buffer size for the
+// message and throttled events, the default throttle time, and the buffer sizes.
+func NewServer(factory MessageMarshaler, activityBufferSize, lifecycleBufferSize uint, defaultThrottle time.Duration) *BasicServer {
 	var onDispatcherAcceptError OnDispatcherAcceptError
 	var onDispatcherStart OnDispatcherStart
 	var onDispatcherStop OnDispatcherStop
 	var onDispatcherAcceptSuccess OnDispatcherAcceptSuccess
+	if activityBufferSize < 16 {
+		activityBufferSize = 16
+	}
+	if lifecycleBufferSize < 1 {
+		lifecycleBufferSize = 1
+	}
 	basicServer := &BasicServer{
-		attendants: Attendants{},
-		conveyor:   make(chan Conveyed, conveyorBufferSize),
+		attendants:            Attendants{},
+		startedEvent:          make(chan BasicServerStartedEvent, lifecycleBufferSize),
+		acceptFailedEvent:     make(chan BasicServerAcceptFailedEvent, lifecycleBufferSize),
+		attendantStartedEvent: make(chan AttendantStartedEvent, lifecycleBufferSize),
+		messageEvent:          make(chan MessageEvent, activityBufferSize),
+		throttledEvent:        make(chan ThrottledEvent, activityBufferSize),
+		attendantStoppedEvent: make(chan AttendantStoppedEvent, lifecycleBufferSize),
+		stoppedEvent:          make(chan BasicServerStoppedEvent, lifecycleBufferSize),
 	}
-	if onServerStart != nil {
-		onDispatcherStart = func(_dispatcher *Dispatcher, addr *net.TCPAddr) {
-			onServerStart(basicServer, addr )
+	// Intermediate events from the attendants and the mapping
+	// lifecycle the basic server implements.
+	attendantStartedEvent := make(chan AttendantStartedEvent)
+	attendantStoppedEvent := make(chan AttendantStoppedEvent)
+	quit := make(chan uint8)
+
+
+	onDispatcherStart = func(_dispatcher *Dispatcher, addr *net.TCPAddr) {
+		go func(){
+			Loop: for {
+				select {
+				case event := <- attendantStartedEvent:
+					basicServer.attendants[event.Attendant] = true
+					basicServer.attendantStartedEvent <- event
+				case event := <- attendantStoppedEvent:
+					delete(basicServer.attendants, event.Attendant)
+					basicServer.attendantStoppedEvent <- event
+				case <-quit:
+					break Loop
+				}
+			}
+		}()
+		basicServer.startedEvent <- BasicServerStartedEvent{
+			Addr: addr,
 		}
 	}
-	if onServerStop != nil {
-		onDispatcherStop = func(_dispatcher *Dispatcher) {
-			onServerStop(basicServer)
-		}
+	onDispatcherStop = func(_dispatcher *Dispatcher) {
+		close(quit)
+		basicServer.stoppedEvent <- BasicServerStoppedEvent(1)
 	}
-	if onServerAcceptError != nil {
-		onDispatcherAcceptError = func(_dispatcher *Dispatcher, err error) {
-			onServerAcceptError(basicServer, err)
-		}
+	onDispatcherAcceptError = func(_dispatcher *Dispatcher, err error) {
+		basicServer.acceptFailedEvent <- BasicServerAcceptFailedEvent(err)
 	}
-	onAttendantStopWrapper := func(attendant *Attendant, stopType AttendantStopType, err error) {
-		delete(basicServer.attendants, attendant)
-		if onAttendantStop != nil {
-			onAttendantStop(attendant, stopType, err)
-		}
-	}
+
+
 	onDispatcherAcceptSuccess = func(dispatcher *Dispatcher, conn *net.TCPConn) {
 		attendant := NewAttendant(
-			conn, factory, basicServer.conveyor, defaultThrottle,
-			onAttendantStart, onAttendantStopWrapper, onAttendantThrottle,
+			conn, factory, defaultThrottle, attendantStartedEvent, attendantStoppedEvent,
+			basicServer.messageEvent, basicServer.throttledEvent,
 		)
-		basicServer.attendants[attendant] = true
 		// noinspection GoUnhandledErrorResult
 		attendant.Start()
 	}

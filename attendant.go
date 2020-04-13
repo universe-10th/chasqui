@@ -2,9 +2,7 @@ package chasqui
 
 import (
 	. "github.com/universe-10th/chasqui/types"
-	"io"
 	"net"
-	"sync"
 	"time"
 )
 
@@ -60,38 +58,51 @@ const (
 )
 
 
+// Start events come in a dummy structure with the attendant as
+// the only value.
+type AttendantStartedEvent struct {
+	Attendant *Attendant
+}
+
+
 // Messages being conveyed come in another kind of structure: The
 // structure will hold both the conveyed message and the attendant
 // that received and conveyed it.
-type Conveyed struct {
+type MessageEvent struct {
 	Attendant *Attendant
 	Message   Message
 }
 
 
-// Callback to report when an attendant successfully ran
-// its lifecycle.
-type OnAttendantStart func(*Attendant)
+// AttendantStoppedEvent events come in another kind of structure: The structure
+// will hold the attendant just stopped, the stop kind, and the
+// error object for abnormal stops. AttendantStoppedEvent attendants are totally
+// useless as they are already closed, and so the handling of this
+// event should not attempt any further interaction with any of the
+// socket features of the attendant.
+type AttendantStoppedEvent struct {
+	Attendant *Attendant
+	StopType  AttendantStopType
+	Error     error
+}
 
 
-// Callback to report when an attendant terminated its
-// lifecycle, either by local or remote command, or by an
-// error that was triggered.
-type OnAttendantStop func(*Attendant, AttendantStopType, error)
-
-
-// Callback to report a throttled message. It takes the attendant
-// that throttled a message, the throttled message, the instant
-// when the message was throttled, and the duration between the
-// throttle instance and the throttle reference time.
-type OnAttendantThrottle func(*Attendant, Message, time.Time, time.Duration)
+// ThrottledEvent events come in another kind of structure: The structure
+// will hold the attendant receiving the throttled message, the
+// instant of the throttle, and the message itself.
+type ThrottledEvent struct {
+	Attendant *Attendant
+	Message   Message
+	Instant   time.Time
+	Lapse     time.Duration
+}
 
 
 // Attendants are spawned objects and routines for a single
 // incoming connection. They are created using certain protocol
 // factory (an instance of MessageMarshaler), are connected to
-// a "central conveyor" (one for all the bunch of messages) to
-// read the incoming messages via an individual goroutine that
+// a central message channel (one for all the bunch of messages)
+// to read the incoming messages via an individual goroutine that
 // works as a "read loop", and have methods to Write and Close
 // the attendant (and the underlying connection).
 //
@@ -117,8 +128,6 @@ type OnAttendantThrottle func(*Attendant, Message, time.Time, time.Duration)
 // - Upon receiving an error of type io.EOF the attendant will
 //   be marked as closed, will not tell the connection to close,
 //   and will trigger the "on close(normal, remote)" event.
-// - Upon receiving an error of type io.ErrClosedPipe, the
-//   same will apply.
 // - Other errors are considered abnormal and will either be
 //   connection errors or format errors. These errors will be
 //   attended by telling the connection to close (ignoring any
@@ -135,24 +144,23 @@ type OnAttendantThrottle func(*Attendant, Message, time.Time, time.Duration)
 // cases, they become particularly useful when there are many
 // clients connecting to many different servers).
 type Attendant struct {
-	mutex        sync.Mutex
 	// The connection and the wrapper are the main elements
 	// involved in the process. Although the wrapper will be
 	// the object being used the most to send/receive data,
 	// the connection is still needed to close it on need.
-	connection   *net.TCPConn
-	wrapper      MessageMarshaler
+	connection     *net.TCPConn
+	wrapper        MessageMarshaler
 	// An internal status will also be needed, to track what
 	// happens in the read loop and to trigger the proper
 	// close event.
-	status       AttendantStatus
-	// Now, the two needed events and the "conveyor".
-	conveyor     chan Conveyed
-	onStart      OnAttendantStart
-	onStop       OnAttendantStop
+	status         AttendantStatus
+	// Now, all the involved events.
+	messageEvent   chan MessageEvent
+	startedEvent   chan AttendantStartedEvent
+	stoppedEvent   chan AttendantStoppedEvent
 	// Arbitrary context which will be user-specific or
 	// library-specific.
-	context      map[string]interface{}
+	context        map[string]interface{}
 	// Throttling involves a mean to have dead time in which
 	// the read loop does not process any message. Those dead
 	// times occur after the last processed message, and they
@@ -162,9 +170,9 @@ type Attendant struct {
 	// should seldom be > 1s). If using a throttle interval of
 	// 0, no throttle will occur at all. The throttle interval
 	// may be changed later.
-	throttle     time.Duration
-	throttleFrom time.Time
-	onThrottle   OnAttendantThrottle
+	throttle       time.Duration
+	throttleFrom   time.Time
+	throttledEvent chan ThrottledEvent
 }
 
 
@@ -172,10 +180,6 @@ type Attendant struct {
 // the status and also triggering the onStart event appropriately.
 func (attendant *Attendant) Start() error {
 	if attendant.status == AttendantNew {
-		attendant.status = AttendantRunning
-		if attendant.onStart != nil {
-			attendant.onStart(attendant)
-		}
 		go attendant.readLoop()
 		return nil
 	} else {
@@ -187,15 +191,9 @@ func (attendant *Attendant) Start() error {
 // Closes the attendant (it will also end its read loop), also
 // sets the end state and triggers the close event.
 func (attendant *Attendant) Stop() error {
-	attendant.mutex.Lock()
-	defer attendant.mutex.Unlock()
 	if attendant.status != AttendantStopped {
-		if attendant.onStop != nil {
-			attendant.onStop(attendant, AttendantLocalStop, nil)
-		}
 		// noinspection GoUnhandledErrorResult
 		attendant.connection.Close()
-		attendant.status = AttendantStopped
 		return nil
 	} else {
 		return AttendantIsAlreadyStopped(true)
@@ -265,58 +263,54 @@ func isClosedSocketError(err error) bool {
 // The read loop will attempt reading all the available data until
 // it finds a gracefully-closed error, an extraneous error, or it
 // was told to close beforehand. Received messages will be conveyed
-// via some kind of "central conveyor" channel.
+// via some kind of central message channel.
 func (attendant *Attendant) readLoop() {
-	for {
-		if message, err := attendant.wrapper.Receive(); err != nil {
-			closedError := isClosedSocketError(err)
-			running := attendant.status == AttendantRunning
-			// We wait a mutex to avoid eventual race conditions when
-			// manually invoking the .Stop method.
-			attendant.mutex.Lock()
-			attendant.mutex.Unlock()
-			if running && !closedError {
-				if err == io.EOF || err == io.ErrClosedPipe {
-					// This error is a graceful close, or a rejection to
-					// start a read operation because the underlying socket
-					// is already closed and the decoder implementation uses
-					// the io.ErrClosedPipe for those cases.
-					if attendant.onStop != nil {
-						attendant.onStop(attendant, AttendantRemoteStop, nil)
-					}
-				} else {
-					// This error is not a graceful close.
-					// It may be a non-graceful close or a decoding error.
-					// net.Error objects are usually non-graceful errors.
-					if attendant.onStop != nil {
-						attendant.onStop(attendant, AttendantAbnormalStop, err)
-					}
-					// noinspection GoUnhandledErrorResult
-					attendant.connection.Close()
-				}
+	if attendant.status != AttendantNew {
+		return
+	}
+
+	// First, the start event
+	attendant.status = AttendantRunning
+	attendant.startedEvent <- AttendantStartedEvent{attendant}
+
+	// The stop type for the last event.
+	var stopType AttendantStopType
+	var stopError error
+
+	Loop: for {
+		if message, err, graceful := attendant.wrapper.Receive(); err != nil {
+			if isClosedSocketError(err) {
+				// The socket is closed. That happened
+				// on our side.
+				stopType = AttendantLocalStop
+				break Loop
+			} else if graceful {
+				// This error is a graceful close.
+				stopType = AttendantRemoteStop
+				break Loop
+			} else {
+				// This error is not a graceful close.
+				// It may be a non-graceful close or a decoding error.
+				// net.Error objects are usually non-graceful errors.
+				stopType = AttendantAbnormalStop
+				stopError = err
+				break Loop
 			}
-			// Notice how errors when not running or ErrNetClosing error
-			// cause this routine to end, but they are not reported. This
-			// because no error matters outside a running state, and for
-			// the ErrNetClosing error, it was most likely caused by the
-			// user invoking .Stop() on the attendant.
-			attendant.status = AttendantStopped
-			return
 		} else {
 			// The message arrived successfully, but the throttle must be
-			// checked now to tell whether the conveyor must pass the new
+			// checked now to tell whether the messageEvent must pass the new
 			// message, or not.
 			if attendant.throttle == 0 {
 				// No throttle is being used right now. It counts as "ok".
-				// Moves the message to the conveyor channel.
-				attendant.conveyor <- Conveyed{attendant, message}
+				// Moves the message to the messageEvent channel.
+				attendant.messageEvent <- MessageEvent{attendant, message}
 			} else if attendant.throttleFrom == (time.Time{}) {
 				// Throttle is being used, but this is the first message
 				// being received (no throttle can occur for it). It counts
 				// as "ok" but the current time will be stored for the next
 				// throttle.
 				attendant.throttleFrom = time.Now()
-				attendant.conveyor <- Conveyed{attendant, message}
+				attendant.messageEvent <- MessageEvent{attendant, message}
 			} else {
 				// Now a throttle check starts. This means that if the lapse
 				// between the current time and the previous message time is
@@ -328,33 +322,39 @@ func (attendant *Attendant) readLoop() {
 				lapse := now.Sub(attendant.throttleFrom)
 				if lapse >= attendant.throttle {
 					attendant.throttleFrom = now
-					attendant.conveyor <- Conveyed{attendant, message}
+					attendant.messageEvent <- MessageEvent{attendant, message}
 				} else {
-					if attendant.onThrottle != nil {
-						attendant.onThrottle(attendant, message, now, lapse)
-					}
+					attendant.throttledEvent <- ThrottledEvent{attendant, message, now, lapse}
 				}
 			}
 		}
 	}
+
+	attendant.status = AttendantStopped
+	if stopType != AttendantLocalStop {
+		// noinspection GoUnhandledErrorResult
+		attendant.connection.Close()
+	}
+	attendant.stoppedEvent <- AttendantStoppedEvent{attendant, stopType, stopError}
 }
 
 
 // Creates a new attendant, ready to be used.
-func NewAttendant(connection *net.TCPConn, factory MessageMarshaler, conveyor chan Conveyed, throttle time.Duration,
-	              onStart OnAttendantStart, onStop OnAttendantStop, onThrottle OnAttendantThrottle) *Attendant {
+func NewAttendant(connection *net.TCPConn, factory MessageMarshaler, throttle time.Duration,
+	              startedEvent chan AttendantStartedEvent, stoppedEvent chan AttendantStoppedEvent,
+	              messageEvent chan MessageEvent, throttledEvent chan ThrottledEvent) *Attendant {
 	if throttle < 0 {
 		throttle = -throttle
 	}
 	return &Attendant{
-		connection: connection,
-		wrapper: factory.Create(connection),
-		status: AttendantNew,
-		conveyor: conveyor,
-		onStart: onStart,
-		onStop: onStop,
-		context: make(map[string]interface{}),
-		throttle: throttle,
-		onThrottle: onThrottle,
+		connection:     connection,
+		wrapper:        factory.Create(connection),
+		status:         AttendantNew,
+		messageEvent:   messageEvent,
+		startedEvent:   startedEvent,
+		stoppedEvent:   stoppedEvent,
+		context:        make(map[string]interface{}),
+		throttle:       throttle,
+		throttledEvent: throttledEvent,
 	}
 }

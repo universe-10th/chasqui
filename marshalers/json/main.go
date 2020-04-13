@@ -45,12 +45,12 @@ type JSONMessageMarshaler struct {
 
 // Receives a JSON message from the underlying
 // buffer (socket, most likely).
-func (marshaler *JSONMessageMarshaler) Receive() (Message, error) {
+func (marshaler *JSONMessageMarshaler) Receive() (Message, error, bool) {
 	msg := &message{}
 	if err := marshaler.decoder.Decode(&msg); err != nil {
-		return nil, err
+		return nil, err, err == io.EOF
 	} else {
-		return msg, nil
+		return msg, nil, false
 	}
 }
 
