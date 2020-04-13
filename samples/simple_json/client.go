@@ -6,7 +6,6 @@ import (
 	"github.com/universe-10th/chasqui/marshalers/json"
 	. "github.com/universe-10th/chasqui/types"
 	"net"
-	"time"
 )
 
 
@@ -16,36 +15,23 @@ func MakeClient(host, clientName string, onExtraClose func()) (*chasqui.Attendan
 	} else if conn, err := net.DialTCP("tcp", nil, addr); err != nil {
 		return nil, err
 	} else {
-		conveyor := make(chan chasqui.Conveyed)
-		quitChannel := make(chan bool)
-
-		onClientStart := func(attendant *chasqui.Attendant) {
-			// noinspection GoUnhandledErrorResult
-			attendant.Send("NAME", Args{clientName}, nil)
-			go func() {
-				Loop: for {
-					select {
-					case msg := <-conveyor:
-						fmt.Printf(
-							"Local(%s) <- %s, %v, %v\n", clientName, msg.Message.Command(),
-							msg.Message.Args(), msg.Message.KWArgs(),
-						)
-					case <-quitChannel:
-						break Loop
-					}
-				}
-			}()
-		}
-		onClientStop := func(attendant *chasqui.Attendant, stopType chasqui.AttendantStopType, err error) {
-			fmt.Printf("Local(%s) stopped: %d, %s\n", clientName, stopType, err)
-			onExtraClose()
-		}
-		onClientThrottle := func(attendant *chasqui.Attendant, message Message, instant time.Time, lapse time.Duration) {
-			// This function does nothing since throttle is 0.
-		}
-
-		return chasqui.NewAttendant(
-			conn, &json.JSONMessageMarshaler{}, conveyor, 0, onClientStart, onClientStop, onClientThrottle,
-		), nil
+		client := chasqui.NewClient(conn, &json.JSONMessageMarshaler{}, 0, 16)
+		go func(){
+			Loop: select {
+			case event := <-client.StartedEvent():
+				fmt.Printf("Local(%s) starting, %s\n", clientName, err)
+				// noinspection GoUnhandledErrorResult
+				event.Attendant.Send("NAME", Args{clientName}, nil)
+			case event := <-client.StoppedEvent():
+				fmt.Printf("Local(%s) stopped: %d, %s\n", clientName, event.StopType, err)
+				onExtraClose()
+				break Loop
+			case event := <-client.MessageEvent():
+				fmt.Printf("Local(%s) received: %v", event.Message)
+			case <-client.ThrottledEvent():
+				// Nothing here.
+			}
+		}()
+		return client, nil
 	}
 }

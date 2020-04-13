@@ -220,7 +220,7 @@ func (attendant *Attendant) ThrottledEvent() <-chan ThrottledEvent {
 
 
 // Returns a read-only channel with all the "attendant started" events.
-func (attendant *Attendant) StaoppedEvent() <-chan AttendantStoppedEvent {
+func (attendant *Attendant) StoppedEvent() <-chan AttendantStoppedEvent {
 	return attendant.stoppedEvent
 }
 
