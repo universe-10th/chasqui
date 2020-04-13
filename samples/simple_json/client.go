@@ -17,19 +17,21 @@ func MakeClient(host, clientName string, onExtraClose func()) (*chasqui.Attendan
 	} else {
 		client := chasqui.NewClient(conn, &json.JSONMessageMarshaler{}, 0, 16)
 		go func(){
-			Loop: select {
-			case event := <-client.StartedEvent():
-				fmt.Printf("Local(%s) starting, %s\n", clientName, err)
-				// noinspection GoUnhandledErrorResult
-				event.Attendant.Send("NAME", Args{clientName}, nil)
-			case event := <-client.StoppedEvent():
-				fmt.Printf("Local(%s) stopped: %d, %s\n", clientName, event.StopType, err)
-				onExtraClose()
-				break Loop
-			case event := <-client.MessageEvent():
-				fmt.Printf("Local(%s) received: %v", event.Message)
-			case <-client.ThrottledEvent():
-				// Nothing here.
+		    Loop: for {
+				select {
+				case event := <-client.StartedEvent():
+					fmt.Printf("Local(%s) starting, %s\n", clientName, err)
+					// noinspection GoUnhandledErrorResult
+					event.Attendant.Send("NAME", Args{clientName}, nil)
+				case event := <-client.StoppedEvent():
+					fmt.Printf("Local(%s) stopped: %d, %s\n", clientName, event.StopType, err)
+					onExtraClose()
+					break Loop
+				case event := <-client.MessageEvent():
+					fmt.Printf("Local(%s) received: %v\nst", clientName, event.Message)
+				case <-client.ThrottledEvent():
+					// Nothing here.
+				}
 			}
 		}()
 		return client, nil

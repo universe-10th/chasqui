@@ -15,6 +15,7 @@ func main() {
 		fmt.Printf("An error was raised while trying to start the server at address 0.0.0.0:3000: %s\n", err)
 		return
 	}
+	go lifecycle(server)
 	defer func() {
 		if err := server.Stop(); err != nil {
 			fmt.Printf("An error was raised while trying to stop the server: %s", err)
@@ -58,6 +59,7 @@ func main() {
 				if attendant, ok := clients[parts[1]]; ok {
 					// noinspection GoUnhandledErrorResult
 					attendant.Stop()
+					delete(clients, parts[1])
 				} else {
 					fmt.Printf("Invalid or unknown name: %s\n", parts[1])
 				}
