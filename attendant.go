@@ -201,6 +201,30 @@ func (attendant *Attendant) Stop() error {
 }
 
 
+// Returns a read-only channel with all the received messages.
+func (attendant *Attendant) MessageEvent() <-chan MessageEvent {
+	return attendant.messageEvent
+}
+
+
+// Returns a read-only channel with all the "attendant started" events.
+func (attendant *Attendant) StartedEvent() <-chan AttendantStartedEvent {
+	return attendant.startedEvent
+}
+
+
+// Returns a read-only channel with all the "throttled" events.
+func (attendant *Attendant) ThrottledEvent() <-chan ThrottledEvent {
+	return attendant.throttledEvent
+}
+
+
+// Returns a read-only channel with all the "attendant started" events.
+func (attendant *Attendant) StaoppedEvent() <-chan AttendantStoppedEvent {
+	return attendant.stoppedEvent
+}
+
+
 // Writes a message via the connection, if it is not closed.
 func (attendant *Attendant) Send(command string, args Args, kwargs KWArgs) error {
 	if attendant.status != AttendantStopped {
@@ -357,4 +381,13 @@ func NewAttendant(connection *net.TCPConn, factory MessageMarshaler, throttle ti
 		throttle:       throttle,
 		throttledEvent: throttledEvent,
 	}
+}
+
+
+// Creates an autonomous client (in a context where only one is needed).
+func NewClient(connection *net.TCPConn, factory MessageMarshaler, throttle time.Duration, bufferSize uint) *Attendant {
+	return NewAttendant(
+		connection, factory, throttle, make(chan AttendantStartedEvent), make(chan AttendantStoppedEvent),
+		make(chan MessageEvent, bufferSize), make(chan ThrottledEvent, bufferSize),
+	)
 }
