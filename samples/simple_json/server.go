@@ -24,7 +24,8 @@ func lifecycle(basicServer *chasqui.BasicServer) {
 		case event := <-basicServer.MessageEvent():
 			attendant := event.Attendant
 			message := event.Message
-			fmt.Printf("Remote(%s) -> A new message arrived: %s\n", attendant.Context("name"), message.Command())
+			name, _ := attendant.Context("name")
+			fmt.Printf("Remote(%s) -> A new message arrived: %s\n", name, message.Command())
 			switch message.Command() {
 			case "NAME":
 				args := message.Args()
