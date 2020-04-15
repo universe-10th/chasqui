@@ -237,8 +237,9 @@ func (attendant *Attendant) Send(command string, args Args, kwargs KWArgs) error
 
 // Gets a context element by its key. Purely user-specific or
 // library-specific.
-func (attendant *Attendant) Context(key string) interface{} {
-	return attendant.context[key]
+func (attendant *Attendant) Context(key string) (interface{}, bool) {
+	result, ok := attendant.context[key]
+	return result, ok
 }
 
 

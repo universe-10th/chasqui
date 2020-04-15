@@ -38,7 +38,7 @@ func lifecycle(basicServer *chasqui.BasicServer) {
 				}
 			case "SHOUT":
 				args := message.Args()
-				if name := attendant.Context("name"); name == nil {
+				if name, _ := attendant.Context("name"); name == nil {
 					if err := attendant.Send("NAME_MUST", nil, nil); err != nil {
 						fmt.Printf("Remote: Failed to respond NAME_MUST: %s\n", err)
 					}
