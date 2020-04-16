@@ -368,6 +368,12 @@ func (attendant *Attendant) readLoop() {
 func NewAttendant(connection *net.TCPConn, factory MessageMarshaler, throttle time.Duration,
 	              startedEvent chan AttendantStartedEvent, stoppedEvent chan AttendantStoppedEvent,
 	              messageEvent chan MessageEvent, throttledEvent chan ThrottledEvent) *Attendant {
+	if connection == nil {
+		panic(ArgumentError{"NewAttendant:connection"})
+	}
+	if factory == nil {
+		panic(ArgumentError{"NewAttendant:factory"})
+	}
 	if throttle < 0 {
 		throttle = -throttle
 	}
@@ -386,9 +392,52 @@ func NewAttendant(connection *net.TCPConn, factory MessageMarshaler, throttle ti
 
 
 // Creates an autonomous client (in a context where only one is needed).
-func NewClient(connection *net.TCPConn, factory MessageMarshaler, throttle time.Duration, bufferSize uint) *Attendant {
+func NewBasicClient(connection *net.TCPConn, factory MessageMarshaler, throttle time.Duration, bufferSize uint) *Attendant {
 	return NewAttendant(
 		connection, factory, throttle, make(chan AttendantStartedEvent), make(chan AttendantStoppedEvent),
 		make(chan MessageEvent, bufferSize), make(chan ThrottledEvent, bufferSize),
 	)
+}
+
+
+// Processes all the events of a Basic Client as callbacks. It is guaranteed
+// that all the callbacks will be run inside a single goroutine, preventing
+// any kind of race conditions, when using this kind of objects.
+type BasicClientFunnel interface {
+	Started(*Attendant)
+	MessageArrived(*Attendant, Message)
+	MessageThrottled(*Attendant, Message, time.Time, time.Duration)
+	Stopped(*Attendant, AttendantStopType, error)
+}
+
+
+// Creates a funnel: runs a goroutine dispatching all the events from a client
+// to a given funnel object processing all the events. A funnel may be used by
+// several clients, but care should be taken, for race conditions will not be
+// prevented among different clients (they will among events inside the same
+// server). A client, on the other hand, will not work appropriately if used by
+// several funnels.
+func ClientFunnel(client *Attendant, funnel BasicClientFunnel) {
+	if client == nil {
+		panic(ArgumentError{"Funnel:client"})
+	}
+	if funnel == nil {
+		panic(ArgumentError{"Funnel:funnel"})
+	}
+
+	go func(client *Attendant) {
+		Loop: for {
+			select {
+			case event := <-client.StartedEvent():
+				funnel.Started(event.Attendant)
+			case event := <-client.MessageEvent():
+				funnel.MessageArrived(event.Attendant, event.Message)
+			case event := <-client.ThrottledEvent():
+				funnel.MessageThrottled(event.Attendant, event.Message, event.Instant, event.Lapse)
+			case event := <-client.StoppedEvent():
+				funnel.Stopped(event.Attendant, event.StopType, event.Error)
+				break Loop
+			}
+		}
+	}(client)
 }

@@ -15,7 +15,7 @@ func MakeClient(host, clientName string, onExtraClose func()) (*chasqui.Attendan
 	} else if conn, err := net.DialTCP("tcp", nil, addr); err != nil {
 		return nil, err
 	} else {
-		client := chasqui.NewClient(conn, &json.JSONMessageMarshaler{}, 0, 16)
+		client := chasqui.NewBasicClient(conn, &json.JSONMessageMarshaler{}, 0, 16)
 		go func(){
 		    Loop: for {
 				select {
@@ -28,7 +28,7 @@ func MakeClient(host, clientName string, onExtraClose func()) (*chasqui.Attendan
 					onExtraClose()
 					break Loop
 				case event := <-client.MessageEvent():
-					fmt.Printf("Local(%s) received: %v\nst", clientName, event.Message)
+					fmt.Printf("Local(%s) received: %v\n", clientName, event.Message)
 				case <-client.ThrottledEvent():
 					// Nothing here.
 				}

@@ -140,6 +140,10 @@ func (basicServer *BasicServer) Enumerate(callback func(*Attendant)) {
 // Creates a new server by configuring a marshaler factory, the channel buffer size for the
 // message and throttled events, the default throttle time, and the buffer sizes.
 func NewServer(factory MessageMarshaler, activityBufferSize, lifecycleBufferSize uint, defaultThrottle time.Duration) *BasicServer {
+	if factory == nil {
+		panic(ArgumentError{"NewServer:factory"})
+	}
+
 	var onDispatcherAcceptError OnDispatcherAcceptError
 	var onDispatcherStart OnDispatcherStart
 	var onDispatcherStop OnDispatcherStop
@@ -165,7 +169,6 @@ func NewServer(factory MessageMarshaler, activityBufferSize, lifecycleBufferSize
 	attendantStartedEvent := make(chan AttendantStartedEvent)
 	attendantStoppedEvent := make(chan AttendantStoppedEvent)
 	quit := make(chan uint8)
-
 
 	onDispatcherStart = func(_dispatcher *Dispatcher, addr *net.TCPAddr) {
 		go func(){
@@ -193,9 +196,7 @@ func NewServer(factory MessageMarshaler, activityBufferSize, lifecycleBufferSize
 	onDispatcherAcceptError = func(_dispatcher *Dispatcher, err error) {
 		basicServer.acceptFailedEvent <- BasicServerAcceptFailedEvent(err)
 	}
-
-
-	onDispatcherAcceptSuccess = func(dispatcher *Dispatcher, conn *net.TCPConn) {
+    onDispatcherAcceptSuccess = func(dispatcher *Dispatcher, conn *net.TCPConn) {
 		attendant := NewAttendant(
 			conn, factory, defaultThrottle, attendantStartedEvent, attendantStoppedEvent,
 			basicServer.messageEvent, basicServer.throttledEvent,
@@ -206,4 +207,56 @@ func NewServer(factory MessageMarshaler, activityBufferSize, lifecycleBufferSize
 	basicServer.dispatcher = NewDispatcher(onDispatcherStart, onDispatcherAcceptSuccess,
 		                                   onDispatcherAcceptError, onDispatcherStop)
 	return basicServer
+}
+
+
+// Processes all the events of a Basic Server as callbacks. It is guaranteed
+// that all the callbacks will be run inside a single goroutine, preventing
+// any kind of race conditions, when using this kind of objects.
+type BasicServerFunnel interface {
+	Started(*BasicServer, *net.TCPAddr)
+	AcceptFailed(*BasicServer, error)
+	Stopped(*BasicServer)
+	AttendantStarted(*BasicServer, *Attendant)
+	MessageArrived(*BasicServer, *Attendant, Message)
+	MessageThrottled(*BasicServer, *Attendant, Message, time.Time, time.Duration)
+	AttendantStopped(*BasicServer, *Attendant, AttendantStopType, error)
+}
+
+
+// Creates a funnel: runs a goroutine dispatching all the events from a server
+// to a given funnel object processing all the events. A funnel may be used by
+// several servers, but care should be taken, for race conditions will not be
+// prevented among different servers (yes among events inside the same server.
+// A server, on the other hand, will not work appropriately if used by several
+// funnels.
+func ServerFunnel(server *BasicServer, funnel BasicServerFunnel) {
+	if server == nil {
+		panic(ArgumentError{"Funnel:server"})
+	}
+	if funnel == nil {
+		panic(ArgumentError{"Funnel:funnel"})
+	}
+
+	go func(basicServer *BasicServer) {
+		Loop: for {
+			select {
+			case event := <-basicServer.StartedEvent():
+				funnel.Started(server, event.Addr)
+			case event := <-basicServer.AcceptFailedEvent():
+				funnel.AcceptFailed(basicServer, event)
+			case <-basicServer.StoppedEvent():
+				funnel.Stopped(basicServer)
+				break Loop
+			case event := <-basicServer.AttendantStartedEvent():
+				funnel.AttendantStarted(basicServer, event.Attendant)
+			case event := <-basicServer.MessageEvent():
+				funnel.MessageArrived(basicServer, event.Attendant, event.Message)
+			case event := <-basicServer.ThrottledEvent():
+				funnel.MessageThrottled(basicServer, event.Attendant, event.Message, event.Instant, event.Lapse)
+			case event := <-basicServer.AttendantStoppedEvent():
+				funnel.AttendantStopped(basicServer, event.Attendant, event.StopType, event.Error)
+			}
+		}
+	}(server)
 }
