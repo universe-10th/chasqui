@@ -15,7 +15,7 @@ func main() {
 		fmt.Printf("An error was raised while trying to start the server at address 0.0.0.0:3000: %s\n", err)
 		return
 	}
-	go lifecycle(server)
+	chasqui.ServerFunnel(server, SampleServerFunnel{})
 	defer func() {
 		if err := server.Stop(); err != nil {
 			fmt.Printf("An error was raised while trying to stop the server: %s", err)
