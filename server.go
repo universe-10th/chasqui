@@ -12,18 +12,18 @@ type Attendants map[*Attendant]bool
 
 
 // Event reporting the server has started.
-type BasicServerStartedEvent struct {
+type ServerStartedEvent struct {
 	Addr   *net.TCPAddr
 }
 
 
 // Event reporting the server encountered
 // an error when accepting a connection.
-type BasicServerAcceptFailedEvent error
+type ServerAcceptFailedEvent error
 
 
 // Event reporting the server has stopped.
-type BasicServerStoppedEvent uint8
+type ServerStoppedEvent uint8
 
 
 // A default teamwork of a dispatcher and all the
@@ -35,16 +35,16 @@ type BasicServerStoppedEvent uint8
 // when spawning an attendant, and also connect
 // the flows of the attendants to the flow of the
 // dispatcher.
-type BasicServer struct {
+type Server struct {
 	dispatcher            *Dispatcher
 	attendants            Attendants
-	startedEvent          chan BasicServerStartedEvent
-	acceptFailedEvent     chan BasicServerAcceptFailedEvent
+	startedEvent          chan ServerStartedEvent
+	acceptFailedEvent     chan ServerAcceptFailedEvent
 	attendantStartedEvent chan AttendantStartedEvent
 	messageEvent          chan MessageEvent
 	throttledEvent        chan ThrottledEvent
 	attendantStoppedEvent chan AttendantStoppedEvent
-	stoppedEvent          chan BasicServerStoppedEvent
+	stoppedEvent          chan ServerStoppedEvent
 	closer                func()
 }
 
@@ -52,86 +52,86 @@ type BasicServer struct {
 // Runs the server. This implies running the underlying
 // dispatcher and relying on the callbacks to do their
 // job.
-func (basicServer *BasicServer) Run(host string) error {
-	if closer, err := basicServer.dispatcher.Run(host); err != nil {
+func (server *Server) Run(host string) error {
+	if closer, err := server.dispatcher.Run(host); err != nil {
 		return err
 	} else {
-		basicServer.closer = closer
+		server.closer = closer
 		return nil
 	}
 }
 
 
 // Stops the server, if running.
-func (basicServer *BasicServer) Stop() error {
-	if basicServer.closer == nil {
+func (server *Server) Stop() error {
+	if server.closer == nil {
 		return DispatcherNotListeningError(true)
 	} else {
-		basicServer.closer()
-		basicServer.Enumerate(func(attendant *Attendant) {
+		server.closer()
+		server.Enumerate(func(attendant *Attendant) {
 			// noinspection GoUnhandledErrorResult
 			attendant.Stop()
 		})
-		basicServer.attendants = Attendants{}
-		basicServer.closer = nil
+		server.attendants = Attendants{}
+		server.closer = nil
 		return nil
 	}
 }
 
 
 // Returns a read-only channel with all the "started" events.
-func (basicServer *BasicServer) StartedEvent() <-chan BasicServerStartedEvent {
-	return basicServer.startedEvent
+func (server *Server) StartedEvent() <-chan ServerStartedEvent {
+	return server.startedEvent
 }
 
 
 // Returns a read-only channel with all the "accept failed" events.
-func (basicServer *BasicServer) AcceptFailedEvent() <-chan BasicServerAcceptFailedEvent {
-	return basicServer.acceptFailedEvent
+func (server *Server) AcceptFailedEvent() <-chan ServerAcceptFailedEvent {
+	return server.acceptFailedEvent
 }
 
 
 // Returns a read-only channel with all the "attendant started" events.
-func (basicServer *BasicServer) AttendantStartedEvent() <-chan AttendantStartedEvent {
-	return basicServer.attendantStartedEvent
+func (server *Server) AttendantStartedEvent() <-chan AttendantStartedEvent {
+	return server.attendantStartedEvent
 }
 
 
 // Returns a read-only channel with all the received messages.
-func (basicServer *BasicServer) MessageEvent() <-chan MessageEvent {
-	return basicServer.messageEvent
+func (server *Server) MessageEvent() <-chan MessageEvent {
+	return server.messageEvent
 }
 
 
 // Returns a read-only channel with all the "throttled" events.
-func (basicServer *BasicServer) ThrottledEvent() <-chan ThrottledEvent {
-	return basicServer.throttledEvent
+func (server *Server) ThrottledEvent() <-chan ThrottledEvent {
+	return server.throttledEvent
 }
 
 
 // Returns a read-only channel with all the "attendant stopped" events.
-func (basicServer *BasicServer) AttendantStoppedEvent() <-chan AttendantStoppedEvent {
-	return basicServer.attendantStoppedEvent
+func (server *Server) AttendantStoppedEvent() <-chan AttendantStoppedEvent {
+	return server.attendantStoppedEvent
 }
 
 
 // Returns a read-only channel with all the "stopped" events.
-func (basicServer *BasicServer) StoppedEvent() <-chan BasicServerStoppedEvent {
-	return basicServer.stoppedEvent
+func (server *Server) StoppedEvent() <-chan ServerStoppedEvent {
+	return server.stoppedEvent
 }
 
 
 // Returns the current listen address of the server,
 // if running. Returns an error if it is not running.
-func (basicServer *BasicServer) Addr() (net.Addr, error) {
-	return basicServer.dispatcher.Addr()
+func (server *Server) Addr() (net.Addr, error) {
+	return server.dispatcher.Addr()
 }
 
 
 // Enumerates all the attendants using a callback. It will seldom
 // be used - perhaps for lobby features or debugging purposes.
-func (basicServer *BasicServer) Enumerate(callback func(*Attendant)) {
-	for attendant, _ := range basicServer.attendants {
+func (server *Server) Enumerate(callback func(*Attendant)) {
+	for attendant, _ := range server.attendants {
 		callback(attendant)
 	}
 }
@@ -139,7 +139,7 @@ func (basicServer *BasicServer) Enumerate(callback func(*Attendant)) {
 
 // Creates a new server by configuring a marshaler factory, the channel buffer size for the
 // message and throttled events, the default throttle time, and the buffer sizes.
-func NewServer(factory MessageMarshaler, activityBufferSize, lifecycleBufferSize uint, defaultThrottle time.Duration) *BasicServer {
+func NewServer(factory MessageMarshaler, activityBufferSize, lifecycleBufferSize uint, defaultThrottle time.Duration) *Server {
 	if factory == nil {
 		panic(ArgumentError{"NewServer:factory"})
 	}
@@ -154,15 +154,15 @@ func NewServer(factory MessageMarshaler, activityBufferSize, lifecycleBufferSize
 	if lifecycleBufferSize < 1 {
 		lifecycleBufferSize = 1
 	}
-	basicServer := &BasicServer{
+	server := &Server{
 		attendants:            Attendants{},
-		startedEvent:          make(chan BasicServerStartedEvent, lifecycleBufferSize),
-		acceptFailedEvent:     make(chan BasicServerAcceptFailedEvent, lifecycleBufferSize),
+		startedEvent:          make(chan ServerStartedEvent, lifecycleBufferSize),
+		acceptFailedEvent:     make(chan ServerAcceptFailedEvent, lifecycleBufferSize),
 		attendantStartedEvent: make(chan AttendantStartedEvent, lifecycleBufferSize),
 		messageEvent:          make(chan MessageEvent, activityBufferSize),
 		throttledEvent:        make(chan ThrottledEvent, activityBufferSize),
 		attendantStoppedEvent: make(chan AttendantStoppedEvent, lifecycleBufferSize),
-		stoppedEvent:          make(chan BasicServerStoppedEvent, lifecycleBufferSize),
+		stoppedEvent:          make(chan ServerStoppedEvent, lifecycleBufferSize),
 	}
 	// Intermediate events from the attendants and the mapping
 	// lifecycle the basic server implements.
@@ -175,52 +175,52 @@ func NewServer(factory MessageMarshaler, activityBufferSize, lifecycleBufferSize
 			Loop: for {
 				select {
 				case event := <- attendantStartedEvent:
-					basicServer.attendants[event.Attendant] = true
-					basicServer.attendantStartedEvent <- event
+					server.attendants[event.Attendant] = true
+					server.attendantStartedEvent <- event
 				case event := <- attendantStoppedEvent:
-					delete(basicServer.attendants, event.Attendant)
-					basicServer.attendantStoppedEvent <- event
+					delete(server.attendants, event.Attendant)
+					server.attendantStoppedEvent <- event
 				case <-quit:
 					break Loop
 				}
 			}
 		}()
-		basicServer.startedEvent <- BasicServerStartedEvent{
+		server.startedEvent <- ServerStartedEvent{
 			Addr: addr,
 		}
 	}
 	onDispatcherStop = func(_dispatcher *Dispatcher) {
 		close(quit)
-		basicServer.stoppedEvent <- BasicServerStoppedEvent(1)
+		server.stoppedEvent <- ServerStoppedEvent(1)
 	}
 	onDispatcherAcceptError = func(_dispatcher *Dispatcher, err error) {
-		basicServer.acceptFailedEvent <- BasicServerAcceptFailedEvent(err)
+		server.acceptFailedEvent <- ServerAcceptFailedEvent(err)
 	}
     onDispatcherAcceptSuccess = func(dispatcher *Dispatcher, conn *net.TCPConn) {
 		attendant := NewAttendant(
 			conn, factory, defaultThrottle, attendantStartedEvent, attendantStoppedEvent,
-			basicServer.messageEvent, basicServer.throttledEvent,
+			server.messageEvent, server.throttledEvent,
 		)
 		// noinspection GoUnhandledErrorResult
 		attendant.Start()
 	}
-	basicServer.dispatcher = NewDispatcher(onDispatcherStart, onDispatcherAcceptSuccess,
+	server.dispatcher = NewDispatcher(onDispatcherStart, onDispatcherAcceptSuccess,
 		                                   onDispatcherAcceptError, onDispatcherStop)
-	return basicServer
+	return server
 }
 
 
-// Processes all the events of a Basic Server as callbacks. It is guaranteed
-// that all the callbacks will be run inside a single goroutine, preventing
-// any kind of race conditions, when using this kind of objects.
-type BasicServerFunnel interface {
-	Started(*BasicServer, *net.TCPAddr)
-	AcceptFailed(*BasicServer, error)
-	Stopped(*BasicServer)
-	AttendantStarted(*BasicServer, *Attendant)
-	MessageArrived(*BasicServer, *Attendant, Message)
-	MessageThrottled(*BasicServer, *Attendant, Message, time.Time, time.Duration)
-	AttendantStopped(*BasicServer, *Attendant, AttendantStopType, error)
+// Processes all the events of a Server as callbacks. It is guaranteed that
+// all the callbacks will be run inside a single goroutine, preventing any
+//kind of race conditions, when using this kind of objects.
+type ServerFunnel interface {
+	Started(*Server, *net.TCPAddr)
+	AcceptFailed(*Server, error)
+	Stopped(*Server)
+	AttendantStarted(*Server, *Attendant)
+	MessageArrived(*Server, *Attendant, Message)
+	MessageThrottled(*Server, *Attendant, Message, time.Time, time.Duration)
+	AttendantStopped(*Server, *Attendant, AttendantStopType, error)
 }
 
 
@@ -230,7 +230,7 @@ type BasicServerFunnel interface {
 // prevented among different servers (yes among events inside the same server.
 // A server, on the other hand, will not work appropriately if used by several
 // funnels.
-func ServerFunnel(server *BasicServer, funnel BasicServerFunnel) {
+func FunnelServerWith(server *Server, funnel ServerFunnel) {
 	if server == nil {
 		panic(ArgumentError{"Funnel:server"})
 	}
@@ -238,24 +238,24 @@ func ServerFunnel(server *BasicServer, funnel BasicServerFunnel) {
 		panic(ArgumentError{"Funnel:funnel"})
 	}
 
-	go func(basicServer *BasicServer) {
+	go func(server *Server) {
 		Loop: for {
 			select {
-			case event := <-basicServer.StartedEvent():
+			case event := <-server.StartedEvent():
 				funnel.Started(server, event.Addr)
-			case event := <-basicServer.AcceptFailedEvent():
-				funnel.AcceptFailed(basicServer, event)
-			case <-basicServer.StoppedEvent():
-				funnel.Stopped(basicServer)
+			case event := <-server.AcceptFailedEvent():
+				funnel.AcceptFailed(server, event)
+			case <-server.StoppedEvent():
+				funnel.Stopped(server)
 				break Loop
-			case event := <-basicServer.AttendantStartedEvent():
-				funnel.AttendantStarted(basicServer, event.Attendant)
-			case event := <-basicServer.MessageEvent():
-				funnel.MessageArrived(basicServer, event.Attendant, event.Message)
-			case event := <-basicServer.ThrottledEvent():
-				funnel.MessageThrottled(basicServer, event.Attendant, event.Message, event.Instant, event.Lapse)
-			case event := <-basicServer.AttendantStoppedEvent():
-				funnel.AttendantStopped(basicServer, event.Attendant, event.StopType, event.Error)
+			case event := <-server.AttendantStartedEvent():
+				funnel.AttendantStarted(server, event.Attendant)
+			case event := <-server.MessageEvent():
+				funnel.MessageArrived(server, event.Attendant, event.Message)
+			case event := <-server.ThrottledEvent():
+				funnel.MessageThrottled(server, event.Attendant, event.Message, event.Instant, event.Lapse)
+			case event := <-server.AttendantStoppedEvent():
+				funnel.AttendantStopped(server, event.Attendant, event.StopType, event.Error)
 			}
 		}
 	}(server)

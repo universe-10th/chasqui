@@ -41,32 +41,32 @@ server:
    the available channels in the server. It must have this structure:
     
    ```
-   func lifecycle(basicServer *chasqui.BasicServer) {
+   func lifecycle(Server *chasqui.Server) {
        Loop: for {
            select {
-           case event := <-basicServer.StartedEvent():
+           case event := <-Server.StartedEvent():
                // The server has just started.
                // event.Addr: The *net.TCPAddr this server was bound to.
-           case event := <-basicServer.AcceptFailedEvent():
+           case event := <-Server.AcceptFailedEvent():
                // An error was encountered while trying to accept a connection.
                // The event itself is the error.
-           case <-basicServer.StoppedEvent():
+           case <-Server.StoppedEvent():
                // The server has been stopped locally.
                // There are no fields here.
-           case event := <-basicServer.AttendantStartedEvent():
+           case event := <-Server.AttendantStartedEvent():
                // A socket has just been accepted (for client sockets: the socket has just started its lifecycle).
-           case event := <-basicServer.MessageEvent():
+           case event := <-Server.MessageEvent():
                // A message has just arrived.
                // event.Attendant: The socket receiving the message.
                // event.Message: The message.
-           case event := <-basicServer.ThrottledEvent():
+           case event := <-Server.ThrottledEvent():
                // A message was throttled. This, because the throttle was set for a particular socket to a nonzero
                // value.
                // event.Attendant: The socket reporting the throttle.
                // event.Message: The throttled message.
                // event.Instant: The exact instant of the message being received.
                // event.Lapse: The lapse that was not accepted since the last message (and thus throttled).
-           case event := <-basicServer.AttendantStoppedEvent():
+           case event := <-Server.AttendantStoppedEvent():
                // A socket was disconnected.
                // event.Attendant: The socket being disconnected.
                // event.StopType: The stop type.
@@ -83,18 +83,18 @@ server:
    and be invoked: `go lifecycle(myServer)`. It is up to the user to define any logic, but all the channels should be
    included in this for/select structure to avoid channels being blocked by not being consumed.
    
-   Alternatively, a convenience function may be invoked: `chasqui.ServerFunnel(myServer, myHandler)` where `myHandler`
-   implements `chasqui.BasicServerFunnel`:
+   Alternatively, a convenience function may be invoked: `chasqui.FunnelServerWith(myServer, myHandler)` where `myHandler`
+   implements `chasqui.ServerFunnel`:
    
    ```
-   type BasicServerFunnel interface {
-       Started(*BasicServer, *net.TCPAddr)
-       AcceptFailed(*BasicServer, error)
-       Stopped(*BasicServer)
-       AttendantStarted(*BasicServer, *Attendant)
-       MessageArrived(*BasicServer, *Attendant, Message)
-       MessageThrottled(*BasicServer, *Attendant, Message, time.Time, time.Duration)
-       AttendantStopped(*BasicServer, *Attendant, AttendantStopType, error)
+   type ServerFunnel interface {
+       Started(*Server, *net.TCPAddr)
+       AcceptFailed(*Server, error)
+       Stopped(*Server)
+       AttendantStarted(*Server, *Attendant)
+       MessageArrived(*Server, *Attendant, Message)
+       MessageThrottled(*Server, *Attendant, Message, time.Time, time.Duration)
+       AttendantStopped(*Server, *Attendant, AttendantStopType, error)
    }
    ```
    
@@ -142,7 +142,7 @@ server:
 Usage (Custom)
 --------------
 
-Custom servers can be created without using the Basic Server components and funnels.
+Custom servers can be created without using the Server components and funnels.
 
 For this to work, invoke `chasqui.Dispatcher` and provide all the callbacks for the different events:
 
@@ -171,13 +171,13 @@ Client sockets can also be created. To make this work, make a standard connectio
 connection with `NewAttendant`, as in the case for custom dispatchers. Then, `client.Start` must be called, and also
 the channels must be provided.
 
-Alternatively, `chasqui.NewBasicClient` wraps the connection and also creates the channels.
+Alternatively, `chasqui.NewClient` wraps the connection and also creates the channels.
 
 Then, a lifecycle goroutine can be defined around the just-created attendant, or a similar funneling approach, ivolving
 implementing this interface:
 
    ```
-   type BasicClientFunnel interface {
+   type ClientFunnel interface {
 	   Started(*Attendant)
 	   MessageArrived(*Attendant, Message)
 	   MessageThrottled(*Attendant, Message, time.Time, time.Duration)

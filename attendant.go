@@ -392,7 +392,7 @@ func NewAttendant(connection *net.TCPConn, factory MessageMarshaler, throttle ti
 
 
 // Creates an autonomous client (in a context where only one is needed).
-func NewBasicClient(connection *net.TCPConn, factory MessageMarshaler, throttle time.Duration, bufferSize uint) *Attendant {
+func NewClient(connection *net.TCPConn, factory MessageMarshaler, throttle time.Duration, bufferSize uint) *Attendant {
 	return NewAttendant(
 		connection, factory, throttle, make(chan AttendantStartedEvent), make(chan AttendantStoppedEvent),
 		make(chan MessageEvent, bufferSize), make(chan ThrottledEvent, bufferSize),
@@ -400,10 +400,10 @@ func NewBasicClient(connection *net.TCPConn, factory MessageMarshaler, throttle 
 }
 
 
-// Processes all the events of a Basic Client as callbacks. It is guaranteed
-// that all the callbacks will be run inside a single goroutine, preventing
-// any kind of race conditions, when using this kind of objects.
-type BasicClientFunnel interface {
+// Processes all the events of a Client as callbacks. It is guaranteed that
+// all the callbacks will be run inside a single goroutine, preventing any
+// kind of race conditions, when using this kind of objects.
+type ClientFunnel interface {
 	Started(*Attendant)
 	MessageArrived(*Attendant, Message)
 	MessageThrottled(*Attendant, Message, time.Time, time.Duration)
@@ -417,7 +417,7 @@ type BasicClientFunnel interface {
 // prevented among different clients (they will among events inside the same
 // server). A client, on the other hand, will not work appropriately if used by
 // several funnels.
-func ClientFunnel(client *Attendant, funnel BasicClientFunnel) {
+func FunnelClientWith(client *Attendant, funnel ClientFunnel) {
 	if client == nil {
 		panic(ArgumentError{"Funnel:client"})
 	}

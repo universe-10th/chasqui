@@ -43,8 +43,8 @@ func MakeClient(host, clientName string, onExtraClose func()) (*chasqui.Attendan
 	} else if conn, err := net.DialTCP("tcp", nil, addr); err != nil {
 		return nil, err
 	} else {
-		client := chasqui.NewBasicClient(conn, &json.JSONMessageMarshaler{}, 0, 16)
-		chasqui.ClientFunnel(client, SampleClientFunnel{clientName, onExtraClose})
+		client := chasqui.NewClient(conn, &json.JSONMessageMarshaler{}, 0, 16)
+		chasqui.FunnelClientWith(client, SampleClientFunnel{clientName, onExtraClose})
 		return client, nil
 	}
 }

@@ -13,28 +13,28 @@ import (
 type SampleServerFunnel struct {}
 
 
-func (funnel SampleServerFunnel) Started(server *chasqui.BasicServer, addr *net.TCPAddr) {
+func (funnel SampleServerFunnel) Started(server *chasqui.Server, addr *net.TCPAddr) {
 	fmt.Println("The server has started successfully")
 }
 
 
-func (funnel SampleServerFunnel) AcceptFailed(server *chasqui.BasicServer, err error) {
+func (funnel SampleServerFunnel) AcceptFailed(server *chasqui.Server, err error) {
 	fmt.Printf("An error was raised while trying to accept a new incoming connection: %s\n", err)
 }
 
 
-func (funnel SampleServerFunnel) Stopped(server *chasqui.BasicServer) {
+func (funnel SampleServerFunnel) Stopped(server *chasqui.Server) {
 	fmt.Printf("The server has stopped successfully")
 }
 
 
-func (funnel SampleServerFunnel) AttendantStarted(server *chasqui.BasicServer, attendant *chasqui.Attendant) {
+func (funnel SampleServerFunnel) AttendantStarted(server *chasqui.Server, attendant *chasqui.Attendant) {
 	// noinspection GoUnhandledErrorResult
 	attendant.Send("Hello", nil, nil)
 }
 
 
-func (funnel SampleServerFunnel) MessageArrived(server *chasqui.BasicServer, attendant *chasqui.Attendant, message Message) {
+func (funnel SampleServerFunnel) MessageArrived(server *chasqui.Server, attendant *chasqui.Attendant, message Message) {
 	name, _ := attendant.Context("name")
 	fmt.Printf("Remote(%s) -> A new message arrived: %s\n", name, message.Command())
 	switch message.Command() {
@@ -69,10 +69,10 @@ func (funnel SampleServerFunnel) MessageArrived(server *chasqui.BasicServer, att
 }
 
 
-func (funnel SampleServerFunnel) MessageThrottled(server *chasqui.BasicServer, attendant *chasqui.Attendant, message Message, instant time.Time, lapse time.Duration) {}
+func (funnel SampleServerFunnel) MessageThrottled(server *chasqui.Server, attendant *chasqui.Attendant, message Message, instant time.Time, lapse time.Duration) {}
 
 
-func (funnel SampleServerFunnel) AttendantStopped(server *chasqui.BasicServer, attendant *chasqui.Attendant, stopType chasqui.AttendantStopType, err error) {}
+func (funnel SampleServerFunnel) AttendantStopped(server *chasqui.Server, attendant *chasqui.Attendant, stopType chasqui.AttendantStopType, err error) {}
 
 
 var server = chasqui.NewServer(
